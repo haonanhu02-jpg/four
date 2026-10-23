@@ -185,10 +185,23 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
         '!document.querySelector(".wb-cloud")?.textContent.includes("本机保存未完成")',
         'local persisted',
       );
-    const expose = () =>
-      evaluate(
+    const expose = async () => {
+      await waitFor(
+        '!!document.querySelector("#app")?.__vue_app__?.config.globalProperties.$pinia?._s.get("workbench")',
+        'mounted workbench store',
+      );
+      return evaluate(
         'window.board=document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench");true',
       );
+    };
+    const reload = async () => {
+      await evaluate('window.__workbenchBeforeReload = true');
+      await call('Page.reload');
+      await waitFor(
+        '!window.__workbenchBeforeReload && document.readyState === "complete"',
+        'replacement document loaded',
+      );
+    };
     const toggleOffline = async (offline) => {
       await call('Network.enable');
       await call('Network.emulateNetworkConditions', {
@@ -238,7 +251,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       'guest consistent weekly metric',
     );
     await screenshot('guest-desktop.png');
-    await call('Page.reload');
+    await reload();
     await ready();
     await expose();
     if ((await evaluate('document.querySelectorAll(".wb-item-daily").length')) !== 7)
@@ -333,7 +346,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     await set('[data-title-id="' + daily + '"]', '离线新增日待办');
     await persisted();
     await screenshot('offline-desktop.png');
-    await call('Page.reload');
+    await reload();
     await ready();
     await expose();
     for (const id of [annual, monthly, weekly, daily])
@@ -407,7 +420,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       'same item conflict',
     );
     await screenshot('conflict-desktop.png');
-    await call('Page.reload');
+    await reload();
     await ready();
     await expose();
     await waitFor(
@@ -474,7 +487,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     );
     await clickText('确认追加');
     await waitFor('document.body.innerText.includes("重试确认上次操作")', 'durable import receipt');
-    await call('Page.reload');
+    await reload();
     await ready();
     await expose();
     await clickText('重试确认上次操作');

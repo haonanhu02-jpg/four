@@ -139,10 +139,15 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
         '!document.querySelector(".wb-cloud")?.textContent.includes("本机保存未完成")',
         'local persisted',
       );
-    const expose = () =>
-      evaluate(
+    const expose = async () => {
+      await waitFor(
+        '!!document.querySelector("#app")?.__vue_app__?.config.globalProperties.$pinia?._s.get("workbench")',
+        'mounted workbench store',
+      );
+      return evaluate(
         'window.board=document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench");true',
       );
+    };
     await call('Page.navigate', { url: origin });
     await waitFor('!!document.querySelector("#email")', 'login');
     const theme = async (value) => {
@@ -226,8 +231,12 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       'update guard',
     );
     await evaluate('board.storageError="";true');
+    await evaluate('window.__workbenchBeforeUpdate = true');
     await clickText('新版本可用 · 保存并更新');
-    await delay(500);
+    await waitFor(
+      '!window.__workbenchBeforeUpdate && document.readyState === "complete"',
+      'updated document loaded',
+    );
     await ready();
     await expose();
     await waitFor(
