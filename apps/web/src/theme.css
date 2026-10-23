@@ -1,0 +1,112 @@
+:root {
+  --page: #f6f8fc;
+  --surface: #fff;
+  --surface-soft: #f1f5fc;
+  --text: #19233b;
+  --text-muted: #64748b;
+  --border: #dce4f0;
+  --accent-soft: #eef2ff;
+  --positive-bg: #edf8f3;
+  --negative-bg: #fff0f0;
+  --warning-bg: #fff8e9;
+  --positive: #21866d;
+  --negative: #ac3545;
+  --warning: #98630b;
+}
+:root[data-theme='dark'] {
+  --page: #111827;
+  --surface: #1b2537;
+  --surface-soft: #243248;
+  --text: #e6edf8;
+  --text-muted: #abbad0;
+  --border: #3a4b65;
+  --accent-soft: #26385d;
+  --positive-bg: #153c35;
+  --negative-bg: #452632;
+  --warning-bg: #463a24;
+  --positive: #74d5b6;
+  --negative: #ff9fac;
+  --warning: #f0c66a;
+  --blue: #93a9ff;
+  --blue-dark: #bac8ff;
+  --muted: #abbad0;
+  --success: #74d5b6;
+}
+:root {
+  --link: #4361ee;
+}
+:root[data-theme='dark'] {
+  --link: #93a9ff;
+}
+body {
+  background: var(--page);
+  color: var(--text);
+}
+.app-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.app-tools label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.app-tools select {
+  font: inherit;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface);
+}
+.app-tools span {
+  max-width: 260px;
+}
+:where(input, select, textarea):focus-visible {
+  outline: 2px solid #93a9ff;
+  outline-offset: 2px;
+}
+dialog {
+  color: var(--text);
+}
+:root[data-theme='dark'] :where(input, textarea, select) {
+  color-scheme: dark;
+}
+@media (max-width: 640px) {
+  .site-header {
+    height: auto;
+    min-height: 90px;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 18px 0;
+  }
+  .app-tools {
+    justify-content: flex-start;
+  }
+  .app-tools select {
+    min-height: 44px;
+  }
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .workbench :where(input, textarea, select) {
+    font-size: 16px;
+  }
+  .wb-actions {
+    justify-content: flex-start;
+  }
+  .wb-dialog-top {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}

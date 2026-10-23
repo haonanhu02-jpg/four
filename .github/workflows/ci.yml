@@ -1,0 +1,94 @@
+name: Workbench checks and containers
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      capacity:
+        description: Run isolated 1000-account capacity verification
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare isolated test configuration
+        run: node deploy/init-env.mjs
+
+      - name: Start PostgreSQL and test SMTP
+        run: docker compose up -d --wait --wait-timeout 120 db mailpit
+
+      - name: Apply database migrations
+        run: npm run db:migrate
+
+      - name: Lint, typecheck and build
+        run: npm run check
+
+      - name: Exercise real database and SMTP flows
+        run: npm run test:integration
+
+      - name: Build application images
+        run: docker compose build
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+
+      - name: Start the composed application
+        run: docker compose up -d --wait --wait-timeout 180
+
+      - name: Verify container HTTP endpoints
+        run: |
+          node --input-type=module -e "for (const path of ['/', '/api/health']) { const response = await fetch('http://localhost:8080' + path); if (!response.ok) throw new Error(path + ': ' + response.status); console.log(path + ' ready'); }"
+
+      - name: Exercise offline editing and account isolation in Chrome
+        run: CHROME_PATH="$(command -v google-chrome || command -v chromium)" npm run test:browser
+
+      - name: Verify themes, installation resources and safe updates
+        run: CHROME_PATH="$(command -v google-chrome || command -v chromium)" npm run test:ui
+
+      - name: Run optional isolated capacity verification
+        if: github.event_name == 'workflow_dispatch' && inputs.capacity
+        run: |
+          node scripts/prepare-capacity.mjs init
+          docker compose --env-file .local/stage6-capacity.env -f compose.production.yaml -f compose.capacity.yaml --profile database up -d --wait --wait-timeout 180
+          node scripts/prepare-capacity.mjs connect
+          npm run test:capacity
+
+      - name: Keep browser and verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbench-verification
+          path: |
+            artifacts/stage5/browser-check.json
+            artifacts/stage5/*.png
+            artifacts/stage6/ui/
+            artifacts/stage6/capacity.json
+          if-no-files-found: ignore
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=100 api migrate web db mailpit
+
+      - name: Stop test services
+        if: always()
+        run: |
+          if [ -f .local/stage6-capacity.env ]; then docker compose --env-file .local/stage6-capacity.env -f compose.production.yaml -f compose.capacity.yaml --profile database down; fi
+          docker compose down --remove-orphans

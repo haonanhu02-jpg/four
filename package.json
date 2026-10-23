@@ -1,0 +1,49 @@
+{
+  "name": "four-layer-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "四层工作对齐工作台",
+  "engines": {
+    "node": ">=24.11 <25",
+    "npm": ">=11"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @workbench/contracts && concurrently -k -n api,web \"npm run dev -w @workbench/api\" \"npm run dev -w @workbench/web\"",
+    "build": "npm run build -w @workbench/contracts && npm run build -w @workbench/api && npm run build -w @workbench/web",
+    "typecheck": "npm run build -w @workbench/contracts && npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format:check": "prettier --check apps packages scripts tests *.json *.mjs *.yaml .github",
+    "db:migrate": "node scripts/migrate.mjs",
+    "test:integration": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "test:browser": "node tests/browser-stage5.mjs",
+    "test:ui": "node tests/browser-stage6.mjs",
+    "test:capacity": "node scripts/capacity.mjs .local/stage6-host.env",
+    "release": "node deploy/release.mjs",
+    "check": "npm run lint && npm run typecheck && npm run build",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.13.0",
+    "eslint-plugin-vue": "^10.11.1",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.2",
+    "tsup": "^8.5.0",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.0",
+    "vue-eslint-parser": "^10.4.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "pg": "^8.23.1"
+  }
+}

@@ -1,0 +1,90 @@
+name: ${COMPOSE_PROJECT_NAME:-four-layer-workbench-production}
+services:
+  db:
+    profiles: [database]
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-workbench}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_DB: ${POSTGRES_DB:-workbench}
+    volumes: [postgres_data:/var/lib/postgresql]
+    mem_limit: 2g
+    cpus: 2
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  migrate:
+    image: ${API_IMAGE:-four-layer-workbench-api:1.0.0}
+    command: [node, scripts/migrate.mjs]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL reachable from containers}
+    depends_on:
+      db: { condition: service_healthy, required: false }
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: 'no'
+  api:
+    image: ${API_IMAGE:-four-layer-workbench-api:1.0.0}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 1g
+    cpus: 2
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?Set random secret}
+      APP_ORIGIN: ${APP_ORIGIN:?Set public HTTPS origin}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-7}
+      SMTP_HOST: ${SMTP_HOST:?Set real SMTP host}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_SECURE: ${SMTP_SECURE:-true}
+      SMTP_FROM: ${SMTP_FROM:?Set sender}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      ROLLOVER_SCHEDULE_ENABLED: ${ROLLOVER_SCHEDULE_ENABLED:-true}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  web:
+    image: ${WEB_IMAGE:-four-layer-workbench-web:1.0.0}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 128m
+    cpus: 1
+    ports: ['${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:8080']
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+volumes:
+  postgres_data:
