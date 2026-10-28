@@ -1,24 +1,29 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import pg from 'pg';
 import { migrate } from '../scripts/migrate.mjs';
 import { seedReferencePlan } from './fixtures/reference-plan.mjs';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import { hashPassword } from '../apps/api/dist/crypto.js';
 import { normalizeDocument, sampleDocument } from '../packages/contracts/dist/index.js';
 
 dotenv.config({ path: fileURLToPath(new URL('../.env', import.meta.url)), quiet: true });
 const origin = 'http://127.0.0.1:5173';
-const mailpit = process.env.TEST_MAILPIT_URL || 'http://127.0.0.1:8025';
 const databaseName = `workbench_test_${Date.now()}_${process.pid}`;
 let admin;
 let pool;
 let app;
 let api;
-const messages = new Set();
 const users = new Map();
+const legacy = {
+  id: randomUUID(),
+  email: `legacy-${randomUUID()}@example.test`,
+  password: '123456',
+  goalId: randomUUID(),
+};
 
 before(
   async () => {
@@ -33,14 +38,34 @@ before(
     process.env.APP_ORIGIN = origin;
     process.env.COOKIE_SECURE = 'false';
     process.env.NODE_ENV = 'test';
-    await migrate(testUrl.toString());
     pool = new pg.Pool({ connectionString: testUrl.toString(), max: 4 });
+    // Start at the released schema and seed an existing account before upgrading.
+    await pool.query(
+      'CREATE TABLE schema_migrations (filename text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())',
+    );
+    const directory = new URL('../database/migrations/', import.meta.url);
+    for (const filename of (await readdir(directory)).filter((f) => /^000[1-4]_/.test(f)).sort()) {
+      const sql = await readFile(new URL(filename, directory), 'utf8');
+      await pool.query(sql);
+      await pool.query('INSERT INTO schema_migrations(filename,checksum) VALUES($1,$2)', [
+        filename,
+        createHash('sha256').update(sql).digest('hex'),
+      ]);
+    }
+    await pool.query('INSERT INTO users(id,email,password_hash) VALUES($1,$2,$3)', [
+      legacy.id,
+      legacy.email,
+      await hashPassword(legacy.password),
+    ]);
+    await pool.query(
+      "INSERT INTO annual_goals(id,user_id,title,year) VALUES($1,$2,'旧账号保留的目标',2026)",
+      [legacy.goalId, legacy.id],
+    );
+    await migrate(testUrl.toString());
     const { createApp } = await import('../apps/api/dist/bootstrap.js');
     app = await createApp();
     await app.listen(0, '127.0.0.1');
     api = await app.getUrl();
-    const mailHealth = await fetch(`${mailpit}/api/v1/messages`);
-    assert.equal(mailHealth.status, 200, 'Start development Mailpit before integration tests');
   },
   { timeout: 60000 },
 );
@@ -48,13 +73,6 @@ before(
 after(async () => {
   if (app) await app.close();
   if (pool) await pool.end();
-  for (const id of messages) {
-    await fetch(`${mailpit}/api/v1/messages`, {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ IDs: [id] }),
-    }).catch(() => {});
-  }
   if (admin) {
     await admin.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
     await admin.end();
@@ -74,44 +92,20 @@ async function request(route, { method = 'GET', body, cookie, requestOrigin = or
   return { response, body: await response.json() };
 }
 
-async function getCode(email, purpose) {
-  const sent = await request('/auth/code', { method: 'POST', body: { email, purpose } });
-  assert.ok(sent.response.ok, `Request code failed: ${sent.body.error?.code}`);
-  assert.equal(typeof sent.body.retryAfterSeconds, 'number');
-  assert.ok(!('code' in sent.body), 'Verification codes must not be in API responses');
-  for (let retry = 0; retry < 30; retry++) {
-    const listing = await (await fetch(`${mailpit}/api/v1/messages`)).json();
-    const match = listing.messages.find((message) =>
-      message.To?.some((recipient) => recipient.Address === email),
-    );
-    if (match) {
-      messages.add(match.ID);
-      const detail = await (await fetch(`${mailpit}/api/v1/message/${match.ID}`)).json();
-      const code = detail.Text.match(/\b\d{6}\b/)?.[0];
-      assert.ok(code, 'SMTP email should include verification code');
-      return code;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  assert.fail('Verification email was not received by SMTP Mailpit');
-}
-
 async function register(label) {
-  const email = `${label}-${randomUUID()}@example.test`;
+  const username = `${label}-${randomUUID()}`;
   const password = 'Test-password-123!';
-  const code = await getCode(email, 'register');
   const result = await request('/auth/register', {
     method: 'POST',
-    body: { email, password, code },
+    body: { username, password },
   });
   assert.ok(result.response.ok, `Registration failed: ${result.body.error?.code}`);
   const setCookie = result.response.headers.get('set-cookie');
   assert.ok(setCookie?.includes('HttpOnly'));
   assert.ok(setCookie?.includes('SameSite=Lax'));
   const account = {
-    email,
+    username,
     password,
-    code,
     cookie: setCookie.split(';')[0],
     id: result.body.user.id,
   };
@@ -132,7 +126,7 @@ test('database readiness and error envelopes', async () => {
   assert.ok(missing.body.error.requestId);
   const invalid = await request('/auth/login', {
     method: 'POST',
-    body: { email: 'invalid', password: 'short', userId: randomUUID() },
+    body: { username: 'invalid', password: 'short', userId: randomUUID() },
   });
   assert.equal(invalid.response.status, 400);
   assert.equal(invalid.body.error.code, 'VALIDATION_ERROR');
@@ -145,11 +139,11 @@ test('database readiness and error envelopes', async () => {
   assert.equal((await malformed.json()).error.code, 'VALIDATION_ERROR');
 });
 
-test('verified registration, hashed credentials, cookie session and logout', async () => {
+test('employee registration, hashed credentials, cookie session and logout', async () => {
   const alice = await register('alice');
   const me = await request('/auth/me', { cookie: alice.cookie });
   assert.equal(me.response.status, 200);
-  assert.equal(me.body.user.email, alice.email);
+  assert.equal(me.body.user.username, alice.username);
   assert.ok(!('passwordHash' in me.body.user));
   const stored = await pool.query('SELECT password_hash FROM users WHERE id=$1', [alice.id]);
   assert.notEqual(stored.rows[0].password_hash, alice.password);
@@ -157,21 +151,30 @@ test('verified registration, hashed credentials, cookie session and logout', asy
     alice.id,
   ]);
   assert.notEqual(sessions.rows[0].token_hash, alice.cookie.split('=')[1]);
-  const codes = await pool.query(
-    'SELECT code_hash, consumed_at FROM auth_codes WHERE email=$1 AND purpose=$2',
-    [alice.email, 'register'],
-  );
-  assert.notEqual(codes.rows[0].code_hash, alice.code);
-  assert.ok(codes.rows[0].consumed_at);
   const logout = await request('/auth/logout', { method: 'POST', cookie: alice.cookie });
   assert.ok(logout.response.ok);
   assert.equal((await request('/auth/me', { cookie: alice.cookie })).response.status, 401);
   const login = await request('/auth/login', {
     method: 'POST',
-    body: { email: alice.email, password: alice.password },
+    body: { username: alice.username, password: alice.password },
   });
   assert.ok(login.response.ok);
   alice.cookie = login.response.headers.get('set-cookie').split(';')[0];
+});
+
+test('employee-login migration preserves existing identities, credentials and goals', async () => {
+  const login = await request('/auth/login', {
+    method: 'POST',
+    body: { username: legacy.email, password: legacy.password },
+  });
+  assert.equal(login.response.status, 201);
+  assert.equal(login.body.user.id, legacy.id);
+  assert.equal(login.body.user.username, legacy.email);
+  const goal = await pool.query('SELECT user_id,title FROM annual_goals WHERE id=$1', [
+    legacy.goalId,
+  ]);
+  assert.equal(goal.rows[0].user_id, legacy.id);
+  assert.equal(goal.rows[0].title, '旧账号保留的目标');
 });
 
 test('account summaries and parent links cannot cross account boundaries', async () => {
@@ -259,89 +262,120 @@ test('origin checks reject cross-site writes and wrong passwords fail', async ()
   assert.equal(forged.response.status, 403);
   const wrong = await request('/auth/login', {
     method: 'POST',
-    body: { email: alice.email, password: 'Wrong-password-123!' },
+    body: { username: alice.username, password: 'Wrong-password-123!' },
   });
   assert.equal(wrong.response.status, 401);
   assert.equal(wrong.body.error.code, 'INVALID_CREDENTIALS');
 });
 
-test('OTP login is single use and resend is rate limited', async () => {
-  const bob = users.get('bob');
-  const code = await getCode(bob.email, 'login');
-  const resend = await request('/auth/code', {
-    method: 'POST',
-    body: { email: bob.email, purpose: 'login' },
-  });
-  assert.equal(resend.response.status, 429);
-  const login = await request('/auth/login/otp', {
-    method: 'POST',
-    body: { email: bob.email, code },
-  });
-  assert.ok(login.response.ok);
-  const replay = await request('/auth/login/otp', {
-    method: 'POST',
-    body: { email: bob.email, code },
-  });
-  assert.equal(replay.response.status, 400);
-  assert.equal(replay.body.error.code, 'INVALID_CODE');
-});
-
-test('expired and exhausted verification codes cannot authenticate', async () => {
-  const charlie = await register('charlie');
-  const code = await getCode(charlie.email, 'login');
-  const incorrect = code === '000000' ? '111111' : '000000';
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const result = await request('/auth/login/otp', {
+test('employee registration accepts six-digit passwords and rejects shorter passwords', async () => {
+  for (const password of ['', '12345']) {
+    const result = await request('/auth/register', {
       method: 'POST',
-      body: { email: charlie.email, code: incorrect },
+      body: { username: 'short-' + randomUUID(), password },
     });
-    assert.ok([400, 429].includes(result.response.status));
+    assert.equal(result.response.status, 400);
+    assert.equal(result.body.error.code, 'VALIDATION_ERROR');
   }
-  assert.ok(
-    !(await request('/auth/login/otp', { method: 'POST', body: { email: charlie.email, code } }))
-      .response.ok,
-  );
-  const resetCode = await getCode(charlie.email, 'reset');
-  await pool.query(
-    "UPDATE auth_codes SET expires_at=now()-interval '1 second' WHERE email=$1 AND purpose='reset'",
-    [charlie.email],
-  );
-  const expired = await request('/auth/password/reset', {
+  const username = '00' + Date.now();
+  const registered = await request('/auth/register', {
     method: 'POST',
-    body: { email: charlie.email, password: 'New-password-123!', code: resetCode },
+    body: { username, password: '123456' },
   });
-  assert.equal(expired.response.status, 400);
+  assert.equal(registered.response.status, 201);
+  assert.equal(registered.body.user.username, username, 'leading zeroes must survive');
+  const login = await request('/auth/login', {
+    method: 'POST',
+    body: { username, password: '123456' },
+  });
+  assert.equal(login.response.status, 201);
+  assert.equal(login.body.user.id, registered.body.user.id);
+  assert.equal(
+    (await pool.query('SELECT email FROM users WHERE id=$1', [registered.body.user.id])).rows[0]
+      .email,
+    null,
+  );
+  for (const invalid of ['', '   ', 'a b', 'x'.repeat(255)]) {
+    assert.equal(
+      (
+        await request('/auth/register', {
+          method: 'POST',
+          body: { username: invalid, password: '123456' },
+        })
+      ).response.status,
+      400,
+    );
+  }
 });
 
-test('password reset revokes prior sessions and changes credentials', async () => {
-  const alice = users.get('alice');
-  const code = await getCode(alice.email, 'reset');
-  const reset = await request('/auth/password/reset', {
+test('duplicate employee numbers are normalized and concurrent registration is atomic', async () => {
+  const username = 'EMP-' + randomUUID();
+  const results = await Promise.all(
+    [username.toLowerCase(), ' ' + username + ' '].map((name) =>
+      request('/auth/register', { method: 'POST', body: { username: name, password: '123456' } }),
+    ),
+  );
+  assert.deepEqual(results.map((r) => r.response.status).sort(), [201, 409]);
+  assert.equal(results.find((r) => r.response.status === 409).body.error.code, 'USERNAME_IN_USE');
+  assert.equal(
+    (
+      await pool.query('SELECT count(*)::int n FROM users WHERE username=$1', [
+        username.toLowerCase(),
+      ])
+    ).rows[0].n,
+    1,
+  );
+  const login = await request('/auth/login', {
     method: 'POST',
-    body: { email: alice.email, code, password: 'Reset-password-123!' },
+    body: { username: ' ' + username + ' ', password: '123456' },
   });
-  assert.ok(reset.response.ok);
-  assert.equal((await request('/auth/me', { cookie: alice.cookie })).response.status, 401);
+  assert.equal(login.response.status, 201);
+});
+
+test('email login, verification-code and unverified password-reset paths are retired', async () => {
+  for (const route of ['/auth/code', '/auth/login/otp', '/auth/password/reset']) {
+    assert.equal(
+      (
+        await request(route, {
+          method: 'POST',
+          body: { email: 'any@example.test', code: '123456', password: '123456' },
+        })
+      ).response.status,
+      404,
+    );
+  }
   assert.equal(
     (
       await request('/auth/login', {
         method: 'POST',
-        body: { email: alice.email, password: alice.password },
+        body: { email: 'any@example.test', password: '123456' },
       })
     ).response.status,
-    401,
+    400,
   );
-  const newLogin = await request('/auth/login', {
+});
+
+test('repeated wrong passwords are throttled by employee number and IP', async () => {
+  const username = 'unknown-' + randomUUID();
+  for (let attempt = 0; attempt < 15; attempt++) {
+    assert.equal(
+      (await request('/auth/login', { method: 'POST', body: { username, password: '123456' } }))
+        .response.status,
+      401,
+    );
+  }
+  const limited = await request('/auth/login', {
     method: 'POST',
-    body: { email: alice.email, password: 'Reset-password-123!' },
+    body: { username, password: '123456' },
   });
-  assert.ok(newLogin.response.ok);
+  assert.equal(limited.response.status, 429);
+  assert.ok(Number(limited.response.headers.get('retry-after')) > 0);
 });
 
 test('database migrations can be run repeatedly without duplicating schema', async () => {
   await migrate(process.env.DATABASE_URL);
   const applied = await pool.query('SELECT count(*)::integer AS count FROM schema_migrations');
-  assert.equal(applied.rows[0].count, 4);
+  assert.equal(applied.rows[0].count, 5);
 });
 
 const chain = {};
@@ -378,7 +412,7 @@ test('stage2: create, edit and complete the full four-level chain with exact bus
   const alice = users.get('alice');
   const login = await request('/auth/login', {
     method: 'POST',
-    body: { email: alice.email, password: 'Reset-password-123!' },
+    body: { username: alice.username, password: alice.password },
   });
   alice.cookie = login.response.headers.get('set-cookie').split(';')[0];
   chain.annual = await createItem('annual', {

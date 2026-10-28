@@ -52,7 +52,7 @@ export const useAccountStore = defineStore('account', () => {
       session.value = {
         user: {
           id: GUEST,
-          email: '访客 · 数据仅在本机',
+          username: '访客 · 数据仅在本机',
           timezone: 'Asia/Shanghai',
           createdAt: new Date().toISOString(),
         },
@@ -119,7 +119,7 @@ export const useAccountStore = defineStore('account', () => {
       session.value = {
         user: {
           id: GUEST,
-          email: '访客 · 数据仅在本机',
+          username: '访客 · 数据仅在本机',
           timezone: 'Asia/Shanghai',
           createdAt: new Date().toISOString(),
         },

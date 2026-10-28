@@ -18,7 +18,7 @@ const report = {
   accounts: 1000,
   itemsPerAccount: 445,
   concurrency: { normal: 25, burst: 100, rollover: 10 },
-  authModel: '1000 seeded sessions; real registration/password/SMTP tested separately',
+  authModel: '1000 seeded sessions; real employee-number registration/password tested separately',
   notes: [
     'Dedicated empty database only',
     '365 days per account; reads include full workspace cache',
@@ -119,7 +119,7 @@ try {
       await client.query('INSERT INTO seed_users VALUES ($1,$2)', [n, id]);
     }
     await client.query(
-      "INSERT INTO users(id,email,password_hash,email_verified_at) SELECT id,'capacity-'||id||'@example.test',$1,now() FROM seed_users",
+      "INSERT INTO users(id,username,password_hash) SELECT id,'capacity-'||id,$1 FROM seed_users",
       [hash],
     );
     await client.query(

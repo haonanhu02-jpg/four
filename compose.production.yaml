@@ -17,7 +17,7 @@ services:
       timeout: 3s
       retries: 30
   migrate:
-    image: ${API_IMAGE:-four-layer-workbench-api:1.0.0}
+    image: ${API_IMAGE:-four-layer-workbench-api:1.0.1}
     command: [node, scripts/migrate.mjs]
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL reachable from containers}
@@ -28,7 +28,7 @@ services:
     cap_drop: [ALL]
     restart: 'no'
   api:
-    image: ${API_IMAGE:-four-layer-workbench-api:1.0.0}
+    image: ${API_IMAGE:-four-layer-workbench-api:1.0.1}
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
@@ -46,12 +46,6 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:?Set public HTTPS origin}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-7}
-      SMTP_HOST: ${SMTP_HOST:?Set real SMTP host}
-      SMTP_PORT: ${SMTP_PORT:-465}
-      SMTP_SECURE: ${SMTP_SECURE:-true}
-      SMTP_FROM: ${SMTP_FROM:?Set sender}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
       ROLLOVER_SCHEDULE_ENABLED: ${ROLLOVER_SCHEDULE_ENABLED:-true}
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -70,7 +64,7 @@ services:
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
   web:
-    image: ${WEB_IMAGE:-four-layer-workbench-web:1.0.0}
+    image: ${WEB_IMAGE:-four-layer-workbench-web:1.0.1}
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]

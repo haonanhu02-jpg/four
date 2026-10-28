@@ -6,9 +6,21 @@ import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
-const root = fileURLToPath(new URL('../', import.meta.url)),
-  version = '1.0.0';
-const output = resolve(process.argv[2] || 'artifacts/stage6/release-1.0.0');
+const root = fileURLToPath(new URL('../', import.meta.url));
+const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
+const output = resolve(process.argv[2] || `artifacts/releases/release-${version}`);
+const evidenceRoot = resolve(process.argv[3] || 'artifacts/release-verification');
+const evidence = JSON.parse(await readFile(join(evidenceRoot, 'delivery-check.json'), 'utf8'));
+if (evidence.version !== version)
+  throw new Error('Verification report version does not match package version');
+const verificationFiles = [
+  'integration.log',
+  'browser/browser-check.json',
+  'ui/browser-check.json',
+  'upgrade-check.json',
+  'delivery-check.json',
+];
+for (const file of verificationFiles) await readFile(join(evidenceRoot, file));
 await mkdir(output, { recursive: false });
 async function filesAt(dir) {
   const result = [];
@@ -35,7 +47,7 @@ for (const entry of await readdir(root, { withFileTypes: true }))
   if (
     entry.isFile() &&
     (/^package.*\.json$/.test(entry.name) ||
-      /^(Dockerfile|compose.*\.yaml|README.md|eslint.config.mjs|tsconfig.*\.json|\.dockerignore|\.gitignore|\.prettier.*|\.env.example)$/.test(
+      /^(Dockerfile|compose.*\.yaml|README.md|eslint.config.mjs|tsconfig.*\.json|\.dockerignore|\.gitignore|\.gitattributes|\.prettier.*|\.env.example)$/.test(
         entry.name,
       ))
   )
@@ -163,30 +175,19 @@ for (const name of [
 await copyFile(join(root, 'compose.production.yaml'), join(output, 'compose.production.yaml'));
 let env = await readFile(join(root, 'deploy/production.env.example'), 'utf8');
 env = env
-  .replace('API_IMAGE=four-layer-workbench-api:1.0.0', `API_IMAGE=${api}`)
-  .replace('WEB_IMAGE=four-layer-workbench-web:1.0.0', `WEB_IMAGE=${web}`)
+  .replace(/^API_IMAGE=.*$/m, `API_IMAGE=${api}`)
+  .replace(/^WEB_IMAGE=.*$/m, `WEB_IMAGE=${web}`)
   .replace(`POSTGRES_IMAGE=${postgresBase}`, `POSTGRES_IMAGE=${postgres}`);
 await writeFile(join(output, 'deploy/production.env.example'), env);
-for (const name of ['生产部署与恢复.md', '阶段6-验收记录.md'])
+for (const name of ['生产部署与恢复.md', '阶段6-验收记录.md', '工号登录改造-验收记录.md'])
   await copyFile(join(root, 'docs', name), join(output, 'docs', name));
 await writeFile(
   join(output, 'README.md'),
   `# 四层对齐工作台 ${version}\n\n先运行 node deploy/verify-release.mjs . 校验文件，再 docker load --input images.tar.gz。运行 node deploy/init-production.mjs，填写 .env.production 的域名和 SMTP，按 docs/生产部署与恢复.md 启动。\n\n镜像为 Linux amd64。内含三个运行镜像、源代码归档和部署恢复工具，不含实际数据库或密钥。\n`,
 );
 await mkdir(join(output, 'verification'));
-for (const [from, to] of [
-  ['capacity.json', 'capacity.json'],
-  ['cache-capacity.json', 'cache-capacity.json'],
-  ['ui/browser-check.json', 'ui.json'],
-  ['final-browser/browser-check.json', 'browser.json'],
-  ['restored-browser/browser-check.json', 'restored-browser.json'],
-  ['integration.log', 'integration.log'],
-  ['database-before.json', 'database-before.json'],
-  ['database-restored.json', 'database-restored.json'],
-  ['database-recreated.json', 'database-recreated.json'],
-  ['delivery-check.json', 'delivery-check.json'],
-])
-  await copyFile(join(root, 'artifacts/stage6', from), join(output, 'verification', to));
+for (const file of verificationFiles)
+  await copyFile(join(evidenceRoot, file), join(output, 'verification', file.replaceAll('/', '-')));
 async function sha(path) {
   const hash = createHash('sha256');
   for await (const bytes of createReadStream(path)) hash.update(bytes);

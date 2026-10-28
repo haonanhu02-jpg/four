@@ -1,20 +1,6 @@
 import { Body, Controller, Get, Inject, Post, Req, Res } from '@nestjs/common';
-import {
-  otpLoginSchema,
-  passwordLoginSchema,
-  registerSchema,
-  requestCodeSchema,
-  resetPasswordSchema,
-} from '@workbench/contracts';
-import type {
-  AuthResponse,
-  OtpLoginInput,
-  PasswordLoginInput,
-  RegisterInput,
-  RequestCodeInput,
-  RequestCodeResponse,
-  ResetPasswordInput,
-} from '@workbench/contracts';
+import { passwordLoginSchema, registerSchema } from '@workbench/contracts';
+import type { AuthResponse, PasswordLoginInput, RegisterInput } from '@workbench/contracts';
 import type { Request, Response } from 'express';
 import { AppConfig } from './config';
 import { AuthService, CreatedSession, SESSION_COOKIE } from './auth.service';
@@ -40,14 +26,6 @@ export class AuthController {
     return session.response;
   }
 
-  @Post('code')
-  requestCode(
-    @Body(new SchemaPipe(requestCodeSchema)) input: RequestCodeInput,
-    @Req() request: Request,
-  ): Promise<RequestCodeResponse> {
-    return this.auth.requestCode(input, request.ip ?? request.socket.remoteAddress ?? 'unknown');
-  }
-
   @Post('register')
   async register(
     @Body(new SchemaPipe(registerSchema)) input: RegisterInput,
@@ -64,24 +42,6 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<AuthResponse> {
     return this.respond(await this.auth.passwordLogin(input, request.ip ?? 'unknown'), response);
-  }
-
-  @Post('login/otp')
-  async otpLogin(
-    @Body(new SchemaPipe(otpLoginSchema)) input: OtpLoginInput,
-    @Req() request: Request,
-    @Res({ passthrough: true }) response: Response,
-  ): Promise<AuthResponse> {
-    return this.respond(await this.auth.otpLogin(input, request.ip ?? 'unknown'), response);
-  }
-
-  @Post('password/reset')
-  async resetPassword(
-    @Body(new SchemaPipe(resetPasswordSchema)) input: ResetPasswordInput,
-    @Req() request: Request,
-    @Res({ passthrough: true }) response: Response,
-  ): Promise<AuthResponse> {
-    return this.respond(await this.auth.resetPassword(input, request.ip ?? 'unknown'), response);
   }
 
   @Post('logout')

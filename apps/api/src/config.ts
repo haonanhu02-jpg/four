@@ -27,12 +27,6 @@ export class AppConfig {
   readonly poolMax = integer('DB_POOL_MAX', 10, 1, 100);
   readonly sessionTtlDays = integer('SESSION_TTL_DAYS', 7, 1, 30);
   readonly trustProxyHops = integer('TRUST_PROXY_HOPS', 0, 0, 5);
-  readonly smtpHost = required('SMTP_HOST');
-  readonly smtpPort = integer('SMTP_PORT', 1025);
-  readonly smtpFrom = required('SMTP_FROM');
-  readonly smtpSecure = process.env.SMTP_SECURE === 'true';
-  readonly smtpUser = process.env.SMTP_USER;
-  readonly smtpPassword = process.env.SMTP_PASS ?? process.env.SMTP_PASSWORD;
   readonly production = process.env.NODE_ENV === 'production';
   readonly cookieSecure = process.env.COOKIE_SECURE === 'true';
 

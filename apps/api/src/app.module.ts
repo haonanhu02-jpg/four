@@ -5,7 +5,6 @@ import { AuthService } from './auth.service';
 import { AppConfig } from './config';
 import { DatabaseService } from './database.service';
 import { HealthController } from './health.controller';
-import { MailService } from './mail.service';
 import { WorkItemsController } from './work-items.controller';
 import { WorkItemsService } from './work-items.service';
 import { InsightsService } from './insights.service';
@@ -30,7 +29,6 @@ import { DataService } from './data.service';
   providers: [
     AppConfig,
     DatabaseService,
-    MailService,
     AuthService,
     WorkItemsService,
     InsightsService,

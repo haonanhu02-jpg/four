@@ -8,7 +8,7 @@ import { Pool } from 'pg';
 dotenv.config({ quiet: true });
 const origin = process.argv[2] || 'http://localhost:8080';
 const output = path.resolve(process.env.BROWSER_ARTIFACT_DIR || 'artifacts/stage6/ui');
-const email = `browser-${randomUUID()}@example.test`;
+const username = `browser-${randomUUID()}`;
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 (async () => {
   await fs.mkdir(output, { recursive: true });
@@ -149,7 +149,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       );
     };
     await call('Page.navigate', { url: origin });
-    await waitFor('!!document.querySelector("#email")', 'login');
+    await waitFor('!!document.querySelector("#username")', 'login');
     const theme = async (value) => {
       await evaluate(
         `(()=>{const e=document.querySelector('[aria-label="外观主题"]');e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`,
@@ -272,8 +272,8 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     chrome.kill();
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
-      const r = await pool.query('SELECT id FROM users WHERE email=ANY($1)', [
-        [email, email.replace('browser-', 'browser-b-')],
+      const r = await pool.query('SELECT id FROM users WHERE username=ANY($1)', [
+        [username, username.replace('browser-', 'browser-b-')],
       ]);
       for (const user of r.rows) {
         await pool.query('BEGIN');
@@ -294,7 +294,6 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
         await pool.query('DELETE FROM users WHERE id=$1', [user.id]);
         await pool.query('COMMIT');
       }
-      await pool.query('DELETE FROM auth_codes WHERE email=$1', [email]);
     } finally {
       await pool.end();
     }

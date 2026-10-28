@@ -2,15 +2,14 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
 dotenv.config({ quiet: true });
-const mailpit = process.env.TEST_MAILPIT_URL || 'http://127.0.0.1:8025';
 const origin = process.argv[2] || 'http://localhost:8080';
 const output = path.resolve(process.env.BROWSER_ARTIFACT_DIR || 'artifacts/stage5');
-const email = `browser-${randomUUID()}@example.test`;
-const password = 'Browser-check-' + randomBytes(12).toString('hex');
+const username = `browser-${randomUUID()}`;
+const password = '123456';
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 (async () => {
   await fs.mkdir(output, { recursive: true });
@@ -127,24 +126,16 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       mobile: false,
     });
 
-    async function registerAccount(targetEmail = email) {
+    async function registerAccount(targetEmail = username) {
       await clickText('注册');
-      await fill('email', targetEmail);
+      await fill('username', targetEmail);
+      await fill('password', '12345');
+      await evaluate('document.querySelector("form").requestSubmit()');
+      await waitFor(
+        'document.querySelector("#password-error")?.textContent.includes("6")',
+        'short password rejected',
+      );
       await fill('password', password);
-      await clickText('获取验证码');
-      let code;
-      for (let i = 0; i < 100; i++) {
-        const listing = await (await fetch(mailpit + '/api/v1/messages')).json();
-        const message = listing.messages.find((m) => m.To.some((r) => r.Address === targetEmail));
-        if (message) {
-          const detail = await (await fetch(`${mailpit}/api/v1/message/${message.ID}`)).json();
-          code = detail.Text.match(/\b\d{6}\b/)?.[0];
-          if (code) break;
-        }
-        await delay(150);
-      }
-      if (!code) throw new Error('Browser registration verification mail not received');
-      await fill('code', code);
       await evaluate('document.querySelector("form").requestSubmit()');
       await waitFor(
         'document.body.innerText.includes("退出登录") && !document.body.innerText.includes("正在连接工作台")',
@@ -232,7 +223,17 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       await call('Page.navigate', { url: origin });
     }
     await call('Page.navigate', { url: origin });
-    await waitFor('!!document.querySelector("#email")', 'login ready');
+    await waitFor('!!document.querySelector("#username")', 'login ready');
+    if ((await evaluate('document.querySelector("#username").placeholder')) !== '请输入您的工号')
+      throw Error('Employee number placeholder');
+    if ((await evaluate('document.querySelector("#password").minLength')) !== 6)
+      throw Error('Password minimum');
+    if (
+      await evaluate(
+        '!!document.querySelector("input[type=email]") || document.body.innerText.includes("验证码") || document.body.innerText.includes("忘记密码")',
+      )
+    )
+      throw Error('Email authentication still visible');
     await clickText('先以访客使用（仅本机保存）');
     await ready();
     await expose();
@@ -257,7 +258,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     if ((await evaluate('document.querySelectorAll(".wb-item-daily").length')) !== 7)
       throw Error('Guest reload lost sample');
     await clickText('登录同步');
-    await waitFor('!!document.querySelector("#email")', 'guest login');
+    await waitFor('!!document.querySelector("#username")', 'guest login');
     await registerAccount();
     await ready();
     await expose();
@@ -523,9 +524,9 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     await persisted();
     if (!(await evaluate('board.pendingCount>0'))) throw Error('Account A has no pending draft');
     await clickText('退出登录');
-    await waitFor('!!document.querySelector("#email")', 'A logout with saved local queue');
+    await waitFor('!!document.querySelector("#username")', 'A logout with saved local queue');
     await evaluate('window.fetch=window.realFetch');
-    const emailB = email.replace('browser-', 'browser-b-');
+    const emailB = username.replace('browser-', 'browser-b-');
     await registerAccount(emailB);
     await ready();
     await expose();
@@ -538,8 +539,8 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     const bdoc = await evaluate('fetch("/api/data/export").then(r=>r.json())');
     if (Object.values(bdoc.items).some((rows) => rows.length)) throw Error('A data uploaded to B');
     await clickText('退出登录');
-    await waitFor('!!document.querySelector("#email")', 'B logout');
-    await fill('email', email);
+    await waitFor('!!document.querySelector("#username")', 'B logout');
+    await fill('username', username);
     await fill('password', password);
     await evaluate('document.querySelector("form").requestSubmit()');
     await ready();
@@ -617,6 +618,8 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     if (browserErrors.length) throw Error('Browser exceptions ' + JSON.stringify(browserErrors));
     const result = {
       origin,
+      employeePasswordLogin: true,
+      passwordMinimumSix: true,
       guestSampleAndReload: true,
       explicitGuestMigration: true,
       offlineReload: true,
@@ -641,8 +644,8 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     chrome.kill();
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
-      const r = await pool.query('SELECT id FROM users WHERE email=ANY($1)', [
-        [email, email.replace('browser-', 'browser-b-')],
+      const r = await pool.query('SELECT id FROM users WHERE username=ANY($1)', [
+        [username, username.replace('browser-', 'browser-b-')],
       ]);
       for (const user of r.rows) {
         await pool.query('BEGIN');
@@ -663,7 +666,6 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
         await pool.query('DELETE FROM users WHERE id=$1', [user.id]);
         await pool.query('COMMIT');
       }
-      await pool.query('DELETE FROM auth_codes WHERE email=$1', [email]);
     } finally {
       await pool.end();
     }

@@ -314,7 +314,7 @@ onUnmounted(() => {
         ><button
           type="button"
           class="wb-button wb-account"
-          :title="account.session?.user.email"
+          :title="account.session?.user.username ?? account.session?.user.email"
           :disabled="loggingOut"
           @click="logout"
         >
@@ -323,7 +323,7 @@ onUnmounted(() => {
       </div>
     </div>
     <div class="wb-account-line">
-      {{ account.session?.user.email
+      {{ account.session?.user.username ?? account.session?.user.email
       }}<span>今天 · {{ dayLabel(todayIn(account.session?.user.timezone)) }}</span>
     </div>
     <DataPanel v-if="store.userId === account.session?.user.id" />

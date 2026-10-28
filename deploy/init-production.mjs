@@ -10,4 +10,4 @@ await writeFile(
     .replace('replace-with-at-least-32-random-characters', randomBytes(32).toString('hex')),
   { flag: 'wx', mode: 0o600 },
 );
-console.log('已生成生产配置；填写域名及真实 SMTP 后启动。已有文件不会被覆盖。');
+console.log('已生成生产配置；填写域名及 HTTPS 配置后启动。已有文件不会被覆盖。');

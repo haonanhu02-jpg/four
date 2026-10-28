@@ -1,157 +1,68 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
-import {
-  API,
-  emailSchema,
-  otpLoginSchema,
-  passwordLoginSchema,
-  registerSchema,
-  resetPasswordSchema,
-  type AuthResponse,
-  type OtpPurpose,
-  type RequestCodeResponse,
-} from '@workbench/contracts';
+import { computed, onMounted, ref, watchEffect } from 'vue';
+import { API, passwordLoginSchema, registerSchema, type AuthResponse } from '@workbench/contracts';
 import { ApiClientError, errorMessage, request } from './lib/api';
 import { useAccountStore } from './stores/account';
 import Workbench from './components/Workbench.vue';
 import AppTools from './components/AppTools.vue';
 
-type Mode = 'password' | 'otp' | 'register' | 'reset';
+type Mode = 'password' | 'register';
 const account = useAccountStore();
 watchEffect(() => {
   document.title = account.session ? '四层对齐工作台' : '四层对齐工作台 · 登录';
 });
 const mode = ref<Mode>('password');
-const email = ref('');
+const username = ref('');
 const password = ref('');
-const code = ref('');
 const showPassword = ref(false);
 const submitting = ref(false);
-const sendingCode = ref(false);
 const error = ref('');
 const requestId = ref('');
 const notice = ref('');
 const fieldErrors = ref<Record<string, string>>({});
-const cooldowns = ref<Record<string, number>>({});
-const now = ref(Date.now());
-let timer: number | undefined;
-
-const purpose = computed<OtpPurpose>(() =>
-  mode.value === 'register' ? 'register' : mode.value === 'reset' ? 'reset' : 'login',
-);
-const cooldownKey = computed(() => `${email.value.trim().toLowerCase()}:${purpose.value}`);
-const cooldown = computed(() =>
-  Math.max(0, Math.ceil(((cooldowns.value[cooldownKey.value] ?? 0) - now.value) / 1000)),
-);
-const isLogin = computed(() => mode.value === 'password' || mode.value === 'otp');
-const needsCode = computed(() => mode.value !== 'password');
-const needsPassword = computed(() => mode.value !== 'otp');
-const title = computed(() =>
-  mode.value === 'register'
-    ? '开始有目标的一天'
-    : mode.value === 'reset'
-      ? '找回你的账号'
-      : '欢迎回来',
-);
+const title = computed(() => (mode.value === 'register' ? '开始有目标的一天' : '欢迎回来'));
 const subtitle = computed(() =>
   mode.value === 'register'
-    ? '用邮箱创建账号，连接你的目标与行动。'
-    : mode.value === 'reset'
-      ? '验证邮箱后，设置一个新的登录密码。'
-      : '登录账号，让手机和电脑连接同一个工作台。',
+    ? '用工号创建账号，连接你的目标与行动。'
+    : '使用工号和密码登录，连接你的工作台。',
 );
-const submitLabel = computed(() =>
-  mode.value === 'register' ? '创建账号' : mode.value === 'reset' ? '重置密码并登录' : '登录工作台',
-);
+const submitLabel = computed(() => (mode.value === 'register' ? '创建账号' : '登录工作台'));
 
 function changeMode(next: Mode) {
   mode.value = next;
   password.value = '';
-  code.value = '';
   error.value = '';
   notice.value = '';
   requestId.value = '';
   fieldErrors.value = {};
   showPassword.value = false;
 }
-
 function displayError(caught: unknown) {
   error.value = errorMessage(caught);
   requestId.value = caught instanceof ApiClientError ? (caught.requestId ?? '') : '';
-  if (caught instanceof ApiClientError && caught.retryAfterSeconds) {
-    cooldowns.value[cooldownKey.value] = Date.now() + caught.retryAfterSeconds * 1000;
-  }
 }
-
-async function sendCode() {
-  if (sendingCode.value || cooldown.value > 0 || submitting.value) return;
-  error.value = '';
-  notice.value = '';
-  requestId.value = '';
-  const parsed = emailSchema.safeParse(email.value);
-  if (!parsed.success) {
-    fieldErrors.value = { ...fieldErrors.value, email: '请输入有效的邮箱地址' };
-    return;
-  }
-  fieldErrors.value = { ...fieldErrors.value, email: '' };
-  sendingCode.value = true;
-  const targetKey = cooldownKey.value;
-  try {
-    const result = await request<RequestCodeResponse>(API.requestCode, {
-      email: parsed.data,
-      purpose: purpose.value,
-    });
-    cooldowns.value[targetKey] = Date.now() + result.retryAfterSeconds * 1000;
-    notice.value = result.message || '验证码已发送，请检查邮箱。';
-  } catch (caught) {
-    displayError(caught);
-  } finally {
-    sendingCode.value = false;
-  }
-}
-
 async function submit() {
-  if (submitting.value || sendingCode.value) return;
+  if (submitting.value) return;
   error.value = '';
   notice.value = '';
   requestId.value = '';
   fieldErrors.value = {};
-  const input = {
-    email: email.value,
-    ...(needsPassword.value ? { password: password.value } : {}),
-    ...(needsCode.value ? { code: code.value } : {}),
-  };
-  const schema =
-    mode.value === 'password'
-      ? passwordLoginSchema
-      : mode.value === 'otp'
-        ? otpLoginSchema
-        : mode.value === 'register'
-          ? registerSchema
-          : resetPasswordSchema;
-  const parsed = schema.safeParse(input);
+  const schema = mode.value === 'register' ? registerSchema : passwordLoginSchema;
+  const parsed = schema.safeParse({ username: username.value, password: password.value });
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
       const field = String(issue.path[0] ?? 'form');
-      if (!fieldErrors.value[field]) {
-        fieldErrors.value[field] = field === 'email' ? '请输入有效的邮箱地址' : issue.message;
-      }
+      if (!fieldErrors.value[field]) fieldErrors.value[field] = issue.message;
     }
     return;
   }
   submitting.value = true;
-  const endpoint =
-    mode.value === 'password'
-      ? API.passwordLogin
-      : mode.value === 'otp'
-        ? API.otpLogin
-        : mode.value === 'register'
-          ? API.register
-          : API.resetPassword;
   try {
-    const result = await request<AuthResponse>(endpoint, parsed.data);
+    const result = await request<AuthResponse>(
+      mode.value === 'register' ? API.register : API.passwordLogin,
+      parsed.data,
+    );
     password.value = '';
-    code.value = '';
     await account.acceptSession(result);
   } catch (caught) {
     displayError(caught);
@@ -159,7 +70,6 @@ async function submit() {
     submitting.value = false;
   }
 }
-
 async function logout() {
   if (submitting.value) return;
   submitting.value = true;
@@ -174,15 +84,8 @@ async function logout() {
     submitting.value = false;
   }
 }
-
 onMounted(() => {
-  timer = window.setInterval(() => {
-    now.value = Date.now();
-  }, 500);
   void account.initialize();
-});
-onUnmounted(() => {
-  if (timer !== undefined) window.clearInterval(timer);
 });
 </script>
 
@@ -269,12 +172,12 @@ onUnmounted(() => {
       </section>
 
       <section class="auth-card" aria-labelledby="auth-heading">
-        <div v-if="mode !== 'reset'" class="main-tabs" aria-label="账号操作">
+        <div class="main-tabs" aria-label="账号操作">
           <button
             type="button"
-            :class="{ active: isLogin }"
-            :aria-pressed="isLogin"
-            :disabled="submitting || sendingCode"
+            :class="{ active: mode === 'password' }"
+            :aria-pressed="mode === 'password'"
+            :disabled="submitting"
             @click="changeMode('password')"
           >
             登录
@@ -283,29 +186,14 @@ onUnmounted(() => {
             type="button"
             :class="{ active: mode === 'register' }"
             :aria-pressed="mode === 'register'"
-            :disabled="submitting || sendingCode"
+            :disabled="submitting"
             @click="changeMode('register')"
           >
             注册
           </button>
         </div>
-        <button
-          v-else
-          type="button"
-          class="back-button"
-          :disabled="submitting || sendingCode"
-          @click="changeMode('password')"
-        >
-          <span aria-hidden="true">←</span> 返回登录
-        </button>
-
-        <div class="auth-title">
-          <h2 id="auth-heading">
-            {{ title }}
-          </h2>
-          <p>{{ subtitle }}</p>
-        </div>
-
+        <h2 id="auth-heading">{{ title }}</h2>
+        <p class="auth-subtitle">{{ subtitle }}</p>
         <div v-if="account.sessionError" class="alert alert-warning" role="alert">
           <span>{{ account.sessionError }}</span>
           <button type="button" class="text-button" @click="account.initialize()">重新连接</button>
@@ -314,118 +202,41 @@ onUnmounted(() => {
           <span>{{ error }}</span
           ><small v-if="requestId">请求编号：{{ requestId }}</small>
         </div>
-        <div v-if="notice" class="alert alert-success" role="status">
-          {{ notice }}
-        </div>
-
-        <div v-if="isLogin" class="login-methods" aria-label="登录方式">
-          <button
-            type="button"
-            :class="{ selected: mode === 'password' }"
-            :aria-pressed="mode === 'password'"
-            :disabled="submitting || sendingCode"
-            @click="changeMode('password')"
-          >
-            密码登录
-          </button>
-          <button
-            type="button"
-            :class="{ selected: mode === 'otp' }"
-            :aria-pressed="mode === 'otp'"
-            :disabled="submitting || sendingCode"
-            @click="changeMode('otp')"
-          >
-            邮箱验证码
-          </button>
-        </div>
-
+        <div v-if="notice" class="alert alert-success" role="status">{{ notice }}</div>
         <form novalidate :aria-busy="submitting" @submit.prevent="submit">
           <div class="form-field">
-            <label for="email">邮箱地址</label>
-            <div class="input-shell" :class="{ invalid: fieldErrors.email }">
+            <label for="username">工号</label>
+            <div class="input-shell" :class="{ invalid: fieldErrors.username }">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <rect
-                  x="2.5"
-                  y="4"
-                  width="15"
-                  height="12"
-                  rx="2.5"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                />
+                <circle cx="10" cy="6" r="3" stroke="currentColor" stroke-width="1.5" />
                 <path
-                  d="m3 5 7 5 7-5"
+                  d="M4 17v-2a6 6 0 0 1 12 0v2"
                   stroke="currentColor"
                   stroke-width="1.5"
-                  stroke-linejoin="round"
+                  stroke-linecap="round"
                 />
               </svg>
               <input
-                id="email"
-                v-model="email"
-                name="email"
-                type="email"
-                autocomplete="email"
-                placeholder="输入你的邮箱地址"
+                id="username"
+                v-model="username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                autocapitalize="none"
+                :spellcheck="false"
+                placeholder="请输入您的工号"
                 maxlength="254"
-                :disabled="submitting || sendingCode"
-                :aria-invalid="Boolean(fieldErrors.email)"
-                :aria-describedby="fieldErrors.email ? 'email-error' : undefined"
+                :disabled="submitting"
+                :aria-invalid="Boolean(fieldErrors.username)"
+                :aria-describedby="fieldErrors.username ? 'username-error' : undefined"
               />
             </div>
-            <p v-if="fieldErrors.email" id="email-error" class="field-error">
-              {{ fieldErrors.email }}
+            <p v-if="fieldErrors.username" id="username-error" class="field-error">
+              {{ fieldErrors.username }}
             </p>
           </div>
-
-          <div v-if="needsCode" class="form-field">
-            <label for="code">邮箱验证码</label>
-            <div class="code-input-row">
-              <div class="input-shell" :class="{ invalid: fieldErrors.code }">
-                <input
-                  id="code"
-                  v-model="code"
-                  name="code"
-                  type="text"
-                  inputmode="numeric"
-                  autocomplete="one-time-code"
-                  placeholder="6 位验证码"
-                  maxlength="6"
-                  :disabled="submitting"
-                  :aria-invalid="Boolean(fieldErrors.code)"
-                  :aria-describedby="fieldErrors.code ? 'code-error' : 'code-hint'"
-                />
-              </div>
-              <button
-                type="button"
-                class="code-button"
-                :disabled="sendingCode || submitting || cooldown > 0"
-                @click="sendCode"
-              >
-                {{ sendingCode ? '发送中…' : cooldown > 0 ? `${cooldown}s 后重发` : '获取验证码' }}
-              </button>
-            </div>
-            <p v-if="fieldErrors.code" id="code-error" class="field-error">
-              {{ fieldErrors.code }}
-            </p>
-            <p v-else id="code-hint" class="field-hint">请查收邮箱，验证码 10 分钟内有效。</p>
-          </div>
-
-          <div v-if="needsPassword" class="form-field">
-            <div class="field-label-row">
-              <label for="password">{{
-                mode === 'reset' ? '新密码' : mode === 'register' ? '设置密码' : '登录密码'
-              }}</label
-              ><button
-                v-if="mode === 'password'"
-                type="button"
-                class="text-button"
-                :disabled="submitting"
-                @click="changeMode('reset')"
-              >
-                忘记密码？
-              </button>
-            </div>
+          <div class="form-field">
+            <label for="password">{{ mode === 'register' ? '设置密码' : '登录密码' }}</label>
             <div class="input-shell" :class="{ invalid: fieldErrors.password }">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
                 <rect
@@ -450,12 +261,12 @@ onUnmounted(() => {
                 name="password"
                 :type="showPassword ? 'text' : 'password'"
                 :autocomplete="mode === 'password' ? 'current-password' : 'new-password'"
-                :placeholder="mode === 'password' ? '输入登录密码' : '设置至少 8 位密码'"
-                minlength="8"
+                :placeholder="mode === 'password' ? '请输入您的密码' : '设置至少 6 位密码'"
+                minlength="6"
                 maxlength="128"
                 :disabled="submitting"
                 :aria-invalid="Boolean(fieldErrors.password)"
-                :aria-describedby="fieldErrors.password ? 'password-error' : undefined"
+                :aria-describedby="fieldErrors.password ? 'password-error' : 'password-hint'"
               />
               <button
                 type="button"
@@ -483,33 +294,23 @@ onUnmounted(() => {
             <p v-if="fieldErrors.password" id="password-error" class="field-error">
               {{ fieldErrors.password }}
             </p>
+            <p v-else id="password-hint" class="field-hint">密码至少 6 位</p>
           </div>
-
-          <button
-            class="primary-button submit-button"
-            type="submit"
-            :disabled="submitting || sendingCode"
-          >
+          <button class="primary-button submit-button" type="submit" :disabled="submitting">
             <span v-if="submitting" class="spinner" aria-hidden="true" />{{
               submitting ? '正在处理…' : submitLabel
             }}<span v-if="!submitting" aria-hidden="true">→</span>
           </button>
         </form>
-
         <p class="account-switch">
-          {{
-            mode === 'register'
-              ? '已经有账号？'
-              : mode === 'reset'
-                ? '想起密码了？'
-                : '还没有账号？'
+          {{ mode === 'register' ? '已经有账号？' : '还没有账号？'
           }}<button
             type="button"
             class="text-button"
-            :disabled="submitting || sendingCode"
-            @click="changeMode(mode === 'register' || mode === 'reset' ? 'password' : 'register')"
+            :disabled="submitting"
+            @click="changeMode(mode === 'register' ? 'password' : 'register')"
           >
-            {{ mode === 'register' || mode === 'reset' ? '返回登录' : '创建一个账号' }}
+            {{ mode === 'register' ? '返回登录' : '创建一个账号' }}
           </button>
         </p>
         <div class="card-footer">

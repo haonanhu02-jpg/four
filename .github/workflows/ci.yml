@@ -33,8 +33,8 @@ jobs:
       - name: Prepare isolated test configuration
         run: node deploy/init-env.mjs
 
-      - name: Start PostgreSQL and test SMTP
-        run: docker compose up -d --wait --wait-timeout 120 db mailpit
+      - name: Start PostgreSQL
+        run: docker compose up -d --wait --wait-timeout 120 db
 
       - name: Apply database migrations
         run: npm run db:migrate
@@ -42,7 +42,7 @@ jobs:
       - name: Lint, typecheck and build
         run: npm run check
 
-      - name: Exercise real database and SMTP flows
+      - name: Exercise real database and employee login flows
         run: npm run test:integration
 
       - name: Build application images
@@ -85,7 +85,7 @@ jobs:
 
       - name: Show service logs on failure
         if: failure()
-        run: docker compose logs --no-color --tail=100 api migrate web db mailpit
+        run: docker compose logs --no-color --tail=100 api migrate web db
 
       - name: Stop test services
         if: always()

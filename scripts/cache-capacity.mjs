@@ -8,7 +8,7 @@ if (new URL(e.DATABASE_URL).pathname !== '/workbench_capacity')
   throw new Error('Isolated capacity database required');
 const pool = new pg.Pool({ connectionString: e.DATABASE_URL });
 const users = (
-  await pool.query("SELECT id FROM users WHERE email LIKE 'capacity-%@example.test' ORDER BY id")
+  await pool.query("SELECT id FROM users WHERE username LIKE 'capacity-%' ORDER BY id")
 ).rows;
 assert.equal(users.length, 1000);
 const samples = { identity: [], cache: [] },
