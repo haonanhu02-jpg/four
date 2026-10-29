@@ -149,6 +149,29 @@ await run(['node', 'deploy/verify-release.mjs', output, '--images']);
 const bundle = `artifacts/releases/four-layer-workbench-${version}-linux-amd64.tar.gz`;
 await run(['tar', '-czf', bundle, '-C', output, '.']);
 await writeFile(bundle + '.sha256', (await sha(bundle)) + '  ' + bundle.split('/').at(-1) + '\n');
+const deploymentAssets = [];
+if (
+  await stat(output + '/deploy/auto-deploy.py').then(
+    () => true,
+    () => false,
+  )
+) {
+  for (const name of ['auto-deploy.py', 'auto-deploy.sh', 'auto-deploy.ps1'])
+    deploymentAssets.push(output + '/deploy/' + name);
+  const guide = 'artifacts/releases/auto-deploy-guide.md';
+  await writeFile(guide, await readFile(output + '/docs/一键部署.md'));
+  deploymentAssets.push(guide);
+  const sums = 'artifacts/releases/auto-deploy.sha256';
+  await writeFile(
+    sums,
+    (
+      await Promise.all(
+        deploymentAssets.map(async (path) => (await sha(path)) + '  ' + path.split('/').at(-1)),
+      )
+    ).join('\n') + '\n',
+  );
+  deploymentAssets.push(sums);
+}
 await run([
   'gh',
   'release',
@@ -159,6 +182,7 @@ await run([
   output + '/images.tar.gz',
   output + '/release.json',
   output + '/SHA256SUMS',
+  ...deploymentAssets,
   '--repo',
   repo,
   '--clobber',

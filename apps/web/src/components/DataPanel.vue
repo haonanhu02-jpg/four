@@ -13,6 +13,7 @@ import { todayIn } from '../lib/dates';
 import { useWorkbenchStore } from '../stores/workbench';
 import * as local from '../lib/local-db';
 import { readTransferFile, downloadTransfer, type FileFormat } from '../lib/file-transfer';
+import DialogCloseButton from './DialogCloseButton.vue';
 const board = useWorkbenchStore(),
   dialog = ref<HTMLDialogElement>();
 const exportDialog = ref<HTMLDialogElement>(),
@@ -342,15 +343,7 @@ onMounted(async () => {
   <dialog ref="exportDialog" class="wb-dialog wb-export-dialog" aria-labelledby="export-heading">
     <div class="wb-dialog-top">
       <h2 id="export-heading">导出数据</h2>
-      <button
-        type="button"
-        class="wb-icon-button"
-        aria-label="关闭导出"
-        :disabled="busy"
-        @click="exportDialog?.close()"
-      >
-        ×
-      </button>
+      <DialogCloseButton label="关闭导出" :disabled="busy" @click="exportDialog?.close()" />
     </div>
     <p>选择导出格式。导出包含当前账号的四层事项、原计划与关联关系；未同步的本机草稿一并保留。</p>
     <div class="wb-export-formats" role="group" aria-label="导出格式">
@@ -393,15 +386,7 @@ onMounted(async () => {
   <dialog ref="dialog" class="wb-dialog wb-data-dialog" aria-labelledby="data-heading">
     <div class="wb-dialog-top">
       <h2 id="data-heading">数据管理 · {{ board.isGuest ? '本机访客' : '当前账号' }}</h2>
-      <button
-        type="button"
-        class="wb-icon-button"
-        aria-label="关闭数据管理"
-        :disabled="busy"
-        @click="dialog?.close()"
-      >
-        ×
-      </button>
+      <DialogCloseButton label="关闭数据管理" :disabled="busy" @click="dialog?.close()" />
     </div>
     <p>
       支持 Word（.docx）、Excel（.xlsx）、TXT 和

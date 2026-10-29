@@ -590,7 +590,8 @@
 }
 .wb-empty {
   border: 1px dashed var(--border, #d7e0f0);
-  background: #ffffff70;
+  background: var(--surface, #fff);
+  color: var(--text, #19233b);
   border-radius: 13px;
   padding: 30px 18px;
   text-align: center;
@@ -610,7 +611,7 @@
   font-size: 14px;
   margin: 0;
   font-weight: 600;
-  color: var(--text-muted, #607391);
+  color: var(--text, #19233b);
 }
 .wb-empty p {
   color: var(--text-muted, #9aa6b8);
@@ -659,18 +660,58 @@
 }
 .wb-dialog-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: nowrap;
   gap: 16px;
+  margin-bottom: 14px;
 }
 .wb-dialog-top h2 {
   flex: 1;
   min-width: 0;
+  margin: 0;
 }
 .wb-dialog-top > button {
   flex-shrink: 0;
   margin-left: auto;
+}
+.wb-dialog-close {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted, #64748b);
+  line-height: 1;
+}
+.wb-dialog-close svg {
+  width: 18px;
+  height: 18px;
+}
+.wb-dialog-close:hover:not(:disabled) {
+  color: var(--text, #19233b);
+  background: var(--surface-soft, #f1f5fc);
+  border-color: var(--border, #dce4f0);
+}
+.wb-dialog-close:active:not(:disabled) {
+  background: var(--accent-soft, #eef2ff);
+}
+.wb-dialog-close:focus-visible {
+  outline: 2px solid var(--link, #4361ee);
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .wb-dialog-close {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 .wb-choice {
   position: relative;

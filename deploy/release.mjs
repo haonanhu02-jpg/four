@@ -193,6 +193,7 @@ for (const name of [
   '工号登录改造-验收记录.md',
   '管理员与文件管理-验收记录.md',
   '一键部署.md',
+  '深色界面可读性-验收记录.md',
 ])
   await copyFile(join(root, 'docs', name), join(output, 'docs', name));
 await writeFile(

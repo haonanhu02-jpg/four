@@ -155,9 +155,46 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
         `(()=>{const e=document.querySelector('[aria-label="外观主题"]');e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`,
       );
     };
+    const contrastChecks = [];
+    const checkContrast = async (region, selector) => {
+      const rows = await evaluate(`(() => {
+        const parse = color => {
+          const values = color.match(/[\\d.]+/g).map(Number);
+          return [...values.slice(0, 3), values[3] ?? 1];
+        };
+        const over = (top, bottom) => top.slice(0, 3).map((v, i) => v * top[3] + bottom[i] * (1 - top[3]));
+        const luminance = color => color.slice(0, 3).map(v => {
+          v /= 255;
+          return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+        }).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+        return [...document.querySelectorAll(${JSON.stringify(selector)})]
+          .filter(element => element.getBoundingClientRect().height > 0)
+          .map(element => {
+            const ancestors = [];
+            for (let node = element; node; node = node.parentElement) ancestors.unshift(node);
+            let background = [255, 255, 255];
+            for (const node of ancestors) background = over(parse(getComputedStyle(node).backgroundColor), background);
+            const foreground = over(parse(getComputedStyle(element).color), background);
+            const a = luminance(foreground), b = luminance(background);
+            return {text: element.textContent.trim(), ratio: +((Math.max(a,b) + .05) / (Math.min(a,b) + .05)).toFixed(2), foreground, background};
+          });
+      })()`);
+      if (!rows.length) throw Error('Missing contrast targets: ' + region);
+      contrastChecks.push({
+        region,
+        theme: await evaluate('document.documentElement.dataset.theme'),
+        rows,
+      });
+    };
+    const previewTargets =
+      '.preview-caption, .preview-label, .path-row strong, .path-row > div > span, .path-number, .today-pill';
     await theme('dark');
     await waitFor('document.documentElement.dataset.theme==="dark"', 'dark login');
+    await checkContrast('login preview', previewTargets);
     await screenshot('login-dark.png', false);
+    await theme('light');
+    await checkContrast('login preview', previewTargets);
+    await screenshot('login-light.png', false);
     await theme('system');
     await call('Emulation.setEmulatedMedia', {
       features: [{ name: 'prefers-color-scheme', value: 'light' }],
@@ -171,7 +208,51 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     await clickText('先以访客使用（仅本机保存）');
     await ready();
     await expose();
+    for (const value of ['dark', 'light']) {
+      await theme(value);
+      for (const view of ['annual', 'monthly']) {
+        await evaluate(`board.view=${JSON.stringify(view)};true`);
+        await waitFor(
+          `document.querySelectorAll('.wb-empty').length===${view === 'annual' ? 1 : 3}`,
+          'all empty levels',
+        );
+        await checkContrast(
+          view + ' empty states',
+          '.wb-empty h3, .wb-empty p, .wb-empty .wb-link, .wb-insight-empty',
+        );
+      }
+      await screenshot('empty-' + value + '.png');
+    }
+    await theme('dark');
     await clickText('数据管理');
+    const dialogClose = await evaluate(`(() => {
+      const element = document.querySelector('[aria-label="关闭数据管理"]');
+      const button = element.getBoundingClientRect(), dialog = element.closest('dialog').getBoundingClientRect();
+      return {width:button.width,height:button.height,svg:!!element.querySelector('svg'),right:dialog.right-button.right,top:button.top-dialog.top};
+    })()`);
+    await screenshot('data-close-dark.png', false);
+    const contrastFailures = contrastChecks.flatMap((check) =>
+      check.rows
+        .filter((row) => row.ratio < 4.5)
+        .map((row) => ({ ...row, region: check.region, theme: check.theme })),
+    );
+    await fs.writeFile(
+      path.join(output, 'readability-check.json'),
+      JSON.stringify({ contrastChecks, contrastFailures, dialogClose }, null, 2),
+    );
+    if (contrastFailures.length)
+      throw Error('Text contrast below 4.5:1: ' + JSON.stringify(contrastFailures));
+    if (
+      !dialogClose.svg ||
+      dialogClose.width !== dialogClose.height ||
+      dialogClose.width < 36 ||
+      dialogClose.right > 30 ||
+      dialogClose.top > 30
+    )
+      throw Error(
+        'Dialog close button must be a square SVG control in the upper right: ' +
+          JSON.stringify(dialogClose),
+      );
     await clickText('载入示例并预览');
     await waitFor('!!document.querySelector(".wb-data-preview")', 'sample preview');
     await screenshot('dialog-dark.png', false);
@@ -197,6 +278,41 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       '[...document.querySelectorAll(".wb-actions button")].every(e=>e.getBoundingClientRect().height>=44)',
     );
     if (!touch) throw Error('Touch targets below 44px');
+    const mobileCloseChecks = [];
+    for (const value of ['dark', 'light']) {
+      await theme(value);
+      for (const label of ['关闭数据管理', '关闭导出']) {
+        await evaluate(`(() => {
+          const text = ${JSON.stringify(label === '关闭数据管理' ? '数据管理' : '导出数据')};
+          [...document.querySelectorAll('.wb-workspace-tools button')].find(e => e.textContent.trim().startsWith(text)).click();
+        })()`);
+        const metrics = await evaluate(`(() => {
+          const element = document.querySelector('[aria-label=${JSON.stringify(label)}]');
+          element.focus();
+          const button = element.getBoundingClientRect(), dialog = element.closest('dialog').getBoundingClientRect();
+          return {width:button.width,height:button.height,svg:!!element.querySelector('svg'),right:dialog.right-button.right,top:button.top-dialog.top};
+        })()`);
+        if (
+          !metrics.svg ||
+          metrics.width !== 44 ||
+          metrics.height !== 44 ||
+          metrics.right > 25 ||
+          metrics.top > 25
+        )
+          throw Error('Mobile close control: ' + JSON.stringify(metrics));
+        if (await evaluate('document.documentElement.scrollWidth>innerWidth'))
+          throw Error('Mobile dialog overflow');
+        mobileCloseChecks.push({ theme: value, label, ...metrics });
+        await screenshot(
+          (label === '关闭数据管理' ? 'data-close-mobile-' : 'export-close-mobile-') +
+            value +
+            '.png',
+          false,
+        );
+        await evaluate(`document.querySelector('[aria-label=${JSON.stringify(label)}]').click()`);
+        await waitFor('!document.querySelector("dialog[open]")', 'dialog closes');
+      }
+    }
     await theme('light');
     await screenshot('mobile-light.png', false);
     await theme('dark');
@@ -263,6 +379,9 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       draftSurvivesUpdate: true,
       apiNeverCached: true,
       paint,
+      contrastChecks,
+      dialogClose,
+      mobileCloseChecks,
       browserErrors,
     };
     await fs.writeFile(path.join(output, 'browser-check.json'), JSON.stringify(result, null, 2));

@@ -5,6 +5,7 @@ import { adminCreateSchema, adminUpdateSchema, adminResetSchema } from '@workben
 import { request, errorMessage } from '../lib/api';
 import { useAccountStore } from '../stores/account';
 import { useWorkbenchStore } from '../stores/workbench';
+import DialogCloseButton from './DialogCloseButton.vue';
 const account = useAccountStore(),
   dialog = ref<HTMLDialogElement>(),
   tab = ref<'accounts' | 'logs'>('accounts');
@@ -170,15 +171,7 @@ function description(before: ManagedAccount | null, after: ManagedAccount, actio
   >
     <div class="wb-dialog-top">
       <h2 id="admin-heading">账号管理</h2>
-      <button
-        type="button"
-        class="wb-icon-button"
-        aria-label="关闭账号管理"
-        :disabled="busy"
-        @click="dialog?.close()"
-      >
-        ×
-      </button>
+      <DialogCloseButton label="关闭账号管理" :disabled="busy" @click="dialog?.close()" />
     </div>
     <div class="wb-admin-tabs">
       <button
