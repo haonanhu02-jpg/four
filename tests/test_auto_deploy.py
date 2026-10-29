@@ -71,6 +71,37 @@ class DeploymentTests(unittest.TestCase):
         deploy.unpack(archive, self.root / "out")
         self.assertEqual((self.root / "out/docs/部署.md").read_bytes(), b"ok")
 
+    def test_verified_release_is_installed_atomically_and_can_be_reused(self):
+        payload = self.root / "payload"
+        (payload / "deploy").mkdir(parents=True)
+        source = b'{"name":"deployment-fixture"}'
+        with tarfile.open(payload / "source.tar.gz", "w:gz") as tar:
+            item = tarfile.TarInfo("package.json")
+            item.size = len(source)
+            tar.addfile(item, io.BytesIO(source))
+        (payload / "images.tar.gz").write_bytes(b"fixture-image-archive")
+        (payload / "compose.production.yaml").write_text("services: {}\n")
+        (payload / "deploy/production.env.example").write_text("WEB_PORT=8080\n")
+        value = manifest()
+        value["sourceFiles"] = [dict(path="package.json", sha256=hashlib.sha256(source).hexdigest())]
+        value["sourceDigest"] = hashlib.sha256(b"package.json\0" + source).hexdigest()
+        for entry in value["artifacts"]:
+            entry["sha256"] = deploy.sha256(payload / entry["path"])
+        deploy.write_json(payload / "release.json", value)
+        archive = self.root / "release.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            for path in payload.rglob("*"):
+                if path.is_file():
+                    tar.add(path, arcname=path.relative_to(payload).as_posix())
+        args = deploy.arguments(["--bundle", str(archive), "--sha256", deploy.sha256(archive)])
+        installation = self.root / "installation"
+        installation.mkdir()
+        first, _, _ = deploy.prepare_release(args, installation)
+        second, _, _ = deploy.prepare_release(args, installation)
+        self.assertEqual(first, second)
+        self.assertEqual((first / "source/package.json").read_bytes(), source)
+        self.assertEqual(list((installation / "releases").glob("prepare-*")), [])
+
     def test_hash_and_source_file_tampering_are_rejected(self):
         path = self.root / "file"
         path.write_bytes(b"correct")

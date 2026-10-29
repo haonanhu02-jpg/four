@@ -320,7 +320,8 @@ def prepare_release(args, root):
     releases = root / "releases"
     releases.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="prepare-", dir=releases) as temporary:
-        stage = Path(temporary)
+        stage = Path(temporary) / "payload"
+        stage.mkdir()
         unpack(archive, stage)
         manifest = validate_manifest(read_json(stage / "release.json"))
         if latest is not None and manifest != latest:
@@ -343,10 +344,11 @@ def prepare_release(args, root):
             if read_json(destination / "release.json") != manifest:
                 raise DeployError("已有运行目录清单发生变化。")
         else:
-            # TemporaryDirectory retains its empty parent; move content into a new release.
-            destination.mkdir()
-            for entry in stage.iterdir():
-                shutil.move(str(entry), str(destination / entry.name))
+            if not destination.resolve().is_relative_to(releases.resolve()):
+                raise DeployError("运行目录越界。")
+            # Commit the complete directory atomically, so interruption cannot leave
+            # a half-written release that would prevent every subsequent retry.
+            os.replace(stage, destination)
     log("源码和镜像已校验，版本 " + manifest["version"] + "，提交 " + manifest["gitCommit"][:12])
     return destination, manifest, expected
 
