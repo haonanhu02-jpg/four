@@ -44,6 +44,7 @@ await run([
 ]);
 await run(['node', 'deploy/init-env.mjs']);
 const output = `artifacts/releases/release-${version}`;
+await mkdir('artifacts/releases', { recursive: true });
 await run(['node', 'deploy/release.mjs', output, 'artifacts/release-verification']);
 const manifest = JSON.parse(await readFile(output + '/release.json', 'utf8'));
 assert.equal(manifest.gitCommit, capture(['git', 'rev-parse', 'HEAD']).trim());
@@ -98,7 +99,7 @@ try {
     'scripts/bootstrap-admin.mjs',
   ]);
   const probe =
-    "const fs=require('fs');const v=fs.readFileSync('/tmp/smoke-admin.txt','utf8').split(/\\r?\\n/);(async()=>{const r=await fetch('http://localhost:3000/api/auth/login',{method:'POST',headers:{Origin:process.env.APP_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({username:v[0].split('：')[1],password:v[1].split('：')[1]})});if(!r.ok)throw Error('login');const a=await r.json();if(a.user.role!=='admin')throw Error('role');for(const p of ['accounts','logs'])if(!(await fetch('http://localhost:3000/api/admin/'+p,{headers:{Cookie:r.headers.get('set-cookie').split(';')[0]}})).ok)throw Error(p);console.log(JSON.stringify({administratorLogin:true,management:true,audit:true}));})().catch(()=>process.exit(1));";
+    "const fs=require('fs');const v=fs.readFileSync('/tmp/smoke-admin.txt','utf8').split(/\\r?\\n/);(async()=>{const r=await fetch('http://127.0.0.1:3000/api/auth/login',{method:'POST',headers:{Origin:process.env.APP_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({username:v[0].split('：')[1],password:v[1].split('：')[1]})});if(!r.ok)throw Error('login');const a=await r.json();if(a.user.role!=='admin')throw Error('role');for(const p of ['accounts','logs'])if(!(await fetch('http://127.0.0.1:3000/api/admin/'+p,{headers:{Cookie:r.headers.get('set-cookie').split(';')[0]}})).ok)throw Error(p);console.log(JSON.stringify({administratorLogin:true,management:true,audit:true}));})().catch(()=>process.exit(1));";
   const admin = JSON.parse(capture([...compose, 'exec', '-T', 'api', 'node', '-e', probe]));
   const proof = {
     verifiedAt: new Date().toISOString(),
