@@ -20,7 +20,7 @@ services:
       start_period: 10s
 
   migrate:
-    image: four-layer-workbench-api:${IMAGE_TAG:-1.0.1}
+    image: four-layer-workbench-api:${IMAGE_TAG:-1.1.0}
     command: ['node', 'scripts/migrate.mjs']
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-workbench}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-workbench}
@@ -30,7 +30,7 @@ services:
     restart: 'no'
 
   api:
-    image: four-layer-workbench-api:${IMAGE_TAG:-1.0.1}
+    image: four-layer-workbench-api:${IMAGE_TAG:-1.1.0}
     build:
       context: .
       target: api
@@ -71,7 +71,7 @@ services:
       - ALL
 
   web:
-    image: four-layer-workbench-web:${IMAGE_TAG:-1.0.1}
+    image: four-layer-workbench-web:${IMAGE_TAG:-1.1.0}
     build:
       context: .
       target: web

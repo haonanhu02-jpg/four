@@ -53,6 +53,7 @@ export const useAccountStore = defineStore('account', () => {
         user: {
           id: GUEST,
           username: '访客 · 数据仅在本机',
+          role: 'user',
           timezone: 'Asia/Shanghai',
           createdAt: new Date().toISOString(),
         },
@@ -120,6 +121,7 @@ export const useAccountStore = defineStore('account', () => {
         user: {
           id: GUEST,
           username: '访客 · 数据仅在本机',
+          role: 'user',
           timezone: 'Asia/Shanghai',
           createdAt: new Date().toISOString(),
         },

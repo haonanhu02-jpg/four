@@ -15,6 +15,8 @@ import { RolloverService } from './rollover.service';
 import { RolloverClock } from './rollover-clock';
 import { DataController } from './data.controller';
 import { DataService } from './data.service';
+import { AdminController } from './admin.controller';
+import { AdminService } from './admin.service';
 
 @Module({
   controllers: [
@@ -25,6 +27,7 @@ import { DataService } from './data.service';
     InsightsController,
     HistoryController,
     DataController,
+    AdminController,
   ],
   providers: [
     AppConfig,
@@ -36,6 +39,7 @@ import { DataService } from './data.service';
     RolloverService,
     RolloverClock,
     DataService,
+    AdminService,
   ],
 })
 export class AppModule {}

@@ -19,6 +19,7 @@ const verificationFiles = [
   'ui/browser-check.json',
   'upgrade-check.json',
   'delivery-check.json',
+  'baseline-browser/browser-check.json',
 ];
 for (const file of verificationFiles) await readFile(join(evidenceRoot, file));
 await mkdir(output, { recursive: false });
@@ -179,11 +180,16 @@ env = env
   .replace(/^WEB_IMAGE=.*$/m, `WEB_IMAGE=${web}`)
   .replace(`POSTGRES_IMAGE=${postgresBase}`, `POSTGRES_IMAGE=${postgres}`);
 await writeFile(join(output, 'deploy/production.env.example'), env);
-for (const name of ['生产部署与恢复.md', '阶段6-验收记录.md', '工号登录改造-验收记录.md'])
+for (const name of [
+  '生产部署与恢复.md',
+  '阶段6-验收记录.md',
+  '工号登录改造-验收记录.md',
+  '管理员与文件管理-验收记录.md',
+])
   await copyFile(join(root, 'docs', name), join(output, 'docs', name));
 await writeFile(
   join(output, 'README.md'),
-  `# 四层对齐工作台 ${version}\n\n先运行 node deploy/verify-release.mjs . 校验文件，再 docker load --input images.tar.gz。运行 node deploy/init-production.mjs，填写 .env.production 的域名和 SMTP，按 docs/生产部署与恢复.md 启动。\n\n镜像为 Linux amd64。内含三个运行镜像、源代码归档和部署恢复工具，不含实际数据库或密钥。\n`,
+  `# 四层对齐工作台 ${version}\n\n先运行 node deploy/verify-release.mjs . 校验文件，再 docker load --input images.tar.gz。运行 node deploy/init-production.mjs，填写 .env.production 的域名和 HTTPS 配置，按 docs/生产部署与恢复.md 启动并初始化管理员。\n\n镜像为 Linux amd64。内含三个运行镜像、源代码归档和部署恢复工具，不含实际数据库、管理员初始密码或密钥。\n`,
 );
 await mkdir(join(output, 'verification'));
 for (const file of verificationFiles)

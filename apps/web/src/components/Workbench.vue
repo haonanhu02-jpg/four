@@ -18,6 +18,7 @@ import { useInsightsStore } from '../stores/insights';
 import HistoryPanel from './HistoryPanel.vue';
 import CarryoverPanel from './CarryoverPanel.vue';
 import DataPanel from './DataPanel.vue';
+import AdminPanel from './AdminPanel.vue';
 import '../workbench.css';
 defineProps<{ loggingOut: boolean; logoutError: string }>();
 const emit = defineEmits<{ logout: [] }>();
@@ -326,7 +327,11 @@ onUnmounted(() => {
       {{ account.session?.user.username ?? account.session?.user.email
       }}<span>今天 · {{ dayLabel(todayIn(account.session?.user.timezone)) }}</span>
     </div>
-    <DataPanel v-if="store.userId === account.session?.user.id" />
+    <div class="wb-workspace-tools">
+      <DataPanel v-if="store.userId === account.session?.user.id" /><AdminPanel
+        v-if="account.session?.user.role === 'admin' && !store.offline"
+      />
+    </div>
     <p v-if="store.isGuest || store.offline || store.hasUnsaved" class="wb-local-note">
       {{
         store.isGuest

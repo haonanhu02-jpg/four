@@ -102,7 +102,7 @@ dialog {
     justify-content: flex-start;
   }
   .wb-dialog-top {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 }
 @media (prefers-reduced-motion: reduce) {

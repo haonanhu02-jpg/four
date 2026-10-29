@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import type { WorkItem, WorkItemType, WorkItemValues } from '@workbench/contracts';
 import { useWorkbenchStore } from '../stores/workbench';
 import ParentPicker from './ParentPicker.vue';
+import ChoicePicker from './ChoicePicker.vue';
 import { useInsightsStore } from '../stores/insights';
 const props = defineProps<{ item: WorkItem; index: number }>();
 const emit = defineEmits<{
@@ -175,29 +176,31 @@ function addSibling() {
           @change="change('dueDate', ($event.target as HTMLInputElement).value || null)"
       /></label>
       <template v-if="item.type === 'weekly'">
-        <label class="wb-field"
-          >优先级<select
-            :value="item.priority"
-            aria-label="周任务优先级"
-            @change="change('priority', ($event.target as HTMLSelectElement).value)"
-          >
-            <option value="P0">P0 · 必须</option>
-            <option value="P1">P1 · 重要</option>
-            <option value="P2">P2 · 有空做</option>
-          </select></label
-        >
-        <label class="wb-field"
-          >状态<select
-            :value="item.status"
-            aria-label="周任务状态"
-            @change="change('status', ($event.target as HTMLSelectElement).value)"
-          >
-            <option value="todo">未开始</option>
-            <option value="doing">进行中</option>
-            <option value="block">受阻</option>
-            <option value="done">已完成</option>
-          </select></label
-        >
+        <div class="wb-field">
+          优先级<ChoicePicker
+            :model-value="item.priority ?? 'P1'"
+            label="周任务优先级"
+            :options="[
+              { value: 'P0', label: 'P0 · 必须' },
+              { value: 'P1', label: 'P1 · 重要' },
+              { value: 'P2', label: 'P2 · 有空做' },
+            ]"
+            @update:model-value="(v) => change('priority', v)"
+          />
+        </div>
+        <div class="wb-field">
+          状态<ChoicePicker
+            :model-value="item.status ?? 'todo'"
+            label="周任务状态"
+            :options="[
+              { value: 'todo', label: '未开始' },
+              { value: 'doing', label: '进行中' },
+              { value: 'block', label: '受阻' },
+              { value: 'done', label: '已完成' },
+            ]"
+            @update:model-value="(v) => change('status', v)"
+          />
+        </div>
         <label class="wb-field"
           >开始<input
             type="date"

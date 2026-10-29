@@ -6,6 +6,7 @@ dist/
 coverage/
 artifacts/
 .local/
+admin-credentials*.txt
 *.tsbuildinfo
 *.log
 .DS_Store

@@ -2,17 +2,19 @@
 
 Vue 3 + TypeScript + Vite 前端、NestJS 后端、PostgreSQL 数据库的工作台工程，规划面向约 1000 名使用者。
 
-当前 1.0.1 使用**工号 + 密码**注册和登录，工号输入提示为“请输入您的工号”，密码至少 6 位，无需邮箱或验证码。已有账号的原账号名和数据保留，后续再绑定工号。旧 v1.0.0 发布附件保持原样。
+当前 1.1.0 使用**工号 + 密码**注册和登录，工号输入提示为“请输入您的工号”，密码至少 6 位，无需邮箱或验证码。已有账号的原账号名和数据保留，后续再绑定工号。旧 v1.0.0 发布附件保持原样。
 
-当前交付 1.0.1，六个阶段已完成本地验收：账号基础、四层事项管理、进度与对齐体检，以及自动顺延、跨年承接和历史复盘。支持年度目标→月度目标→周任务→日待办的完整来源链、周期筛选、自动保存、版本冲突处理及回收站，正式数据保存到 PostgreSQL。桌面和手机均可使用；IndexedDB 持久化访客数据、离线草稿和待同步操作，联网后提交，支持旧 JSON 迁移、示例和备份恢复。
+当前交付 1.1.0，六个阶段已完成本地验收：账号基础、四层事项管理、进度与对齐体检，以及自动顺延、跨年承接和历史复盘。支持年度目标→月度目标→周任务→日待办的完整来源链、周期筛选、自动保存、版本冲突处理及回收站，正式数据保存到 PostgreSQL。桌面和手机均可使用；IndexedDB 持久化访客数据、离线草稿和待同步操作，联网后提交，支持旧 JSON 迁移、示例和备份恢复。
+
+新增管理员账号管理及不可变管理日志，支持 Word（.docx）、Excel（.xlsx）、TXT 与 JSON 导入导出。使用方法见[管理员与文件管理说明](docs/管理员与文件管理-验收记录.md)。
 
 ## 下载镜像与生产部署
 
-已验证的 Linux amd64 镜像及完整运行包见 [v1.0.1 Releases](https://github.com/haonanhu02-jpg/four/releases/tag/v1.0.1)。源码版本为 Git 标签 `v1.0.1`；`main` 分支会继续更新。
+已验证的 Linux amd64 镜像及完整运行包见 [v1.1.0 Releases](https://github.com/haonanhu02-jpg/four/releases/tag/v1.1.0)。源码版本为 Git 标签 `v1.1.0`；`main` 分支会继续更新。
 
-- [完整交付包](https://github.com/haonanhu02-jpg/four/releases/download/v1.0.1/four-layer-workbench-1.0.1-linux-amd64.tar.gz)：包含 API、web、PostgreSQL 18 镜像、源码、生产 Compose、配置模板、备份恢复工具及验收摘要。
-- [独立镜像归档](https://github.com/haonanhu02-jpg/four/releases/download/v1.0.1/images.tar.gz)：仅需镜像时下载，可直接 `docker load --input images.tar.gz`。
-- [完整包 SHA-256](https://github.com/haonanhu02-jpg/four/releases/download/v1.0.1/four-layer-workbench-1.0.1-linux-amd64.tar.gz.sha256)：用于校验下载文件。
+- [完整交付包](https://github.com/haonanhu02-jpg/four/releases/download/v1.1.0/four-layer-workbench-1.1.0-linux-amd64.tar.gz)：包含 API、web、PostgreSQL 18 镜像、源码、生产 Compose、配置模板、备份恢复工具及验收摘要。
+- [独立镜像归档](https://github.com/haonanhu02-jpg/four/releases/download/v1.1.0/images.tar.gz)：仅需镜像时下载，可直接 `docker load --input images.tar.gz`。
+- [完整包 SHA-256](https://github.com/haonanhu02-jpg/four/releases/download/v1.1.0/four-layer-workbench-1.1.0-linux-amd64.tar.gz.sha256)：用于校验下载文件。
 
 镜像通过 Releases 提供，本版本没有发布到 GHCR。完整包在空目录解压后运行：
 
@@ -37,6 +39,8 @@ node deploy/init-production.mjs
 node deploy/init-env.mjs
 docker compose up -d --build --wait
 ```
+
+初次启动后运行 `node scripts/bootstrap-admin.mjs`（需先执行 `npm ci` 和 `npm run build`），默认管理员工号为 `admin`，随机初始密码仅写入 `.local/admin-credentials.txt`。仅使用镜像部署时，按[生产部署说明](docs/生产部署与恢复.md)在容器中执行初始化并取出凭据文件。管理员密码不会写入源码或镜像。
 
 配置生成器只在 `.env` 不存在时创建文件，随机生成数据库密码与令牌密钥。已有 `.env` 时保留当前配置，直接启动即可。
 
@@ -96,13 +100,13 @@ npm run test:ui
 Dockerfile 使用多阶段构建，包含 `api` 和 `web` 两个运行目标。默认镜像名：
 
 ```text
-four-layer-workbench-api:1.0.1
-four-layer-workbench-web:1.0.1
+four-layer-workbench-api:1.1.0
+four-layer-workbench-web:1.1.0
 ```
 
 前端由非 root Nginx 服务并代理 API，后端由非 root Node.js 进程运行。生产依赖和编译产物进入运行镜像，`.env`、测试数据和实际密钥不进入镜像。
 
-第六阶段的历史容量实测见[第六阶段验收记录](docs/阶段6-验收记录.md)。当前 1.0.1 完整包位于 `artifacts/releases/release-1.0.1/`，发布附件包含镜像与 SHA-256 校验；运行说明见[生产部署与恢复](docs/生产部署与恢复.md)。正式域名、HTTPS 与服务器按实际环境配置，不需要 SMTP。
+第六阶段的历史容量实测见[第六阶段验收记录](docs/阶段6-验收记录.md)。当前 1.1.0 完整包位于 `artifacts/releases/release-1.1.0/`，发布附件包含镜像与 SHA-256 校验；运行说明见[生产部署与恢复](docs/生产部署与恢复.md)。正式域名、HTTPS 与服务器按实际环境配置，不需要 SMTP。
 
 - [技术方案](docs/四层工作对齐工作台-技术方案.md)
 - [实施阶段计划](docs/四层工作对齐工作台-实施阶段计划.md)
@@ -110,5 +114,5 @@ four-layer-workbench-web:1.0.1
 发布工具使用当前 package.json 版本，并要求提供对应版本的验收目录，防止把旧报告放入新版本：
 
 ```sh
-npm run release -- artifacts/releases/release-1.0.1 artifacts/employee-login
+npm run release -- artifacts/releases/release-1.1.0 artifacts/admin-formats
 ```

@@ -18,6 +18,9 @@ const DUMMY_PASSWORD_HASH = `scrypt$32768$8$1$${'00'.repeat(16)}$${'00'.repeat(6
 interface UserRow {
   id: string;
   username: string;
+  role: 'user' | 'admin';
+  disabled_at: Date | null;
+  deleted_at: Date | null;
   password_hash: string;
   timezone: string;
   created_at: Date;
@@ -38,6 +41,7 @@ function publicUser(row: UserRow): PublicUser {
   return {
     id: row.id,
     username: row.username,
+    role: row.role,
     timezone: row.timezone,
     createdAt: row.created_at.toISOString(),
   };
@@ -96,16 +100,23 @@ export class AuthService {
     );
     const row = result.rows[0];
     const valid = await verifyPassword(input.password, row?.password_hash ?? DUMMY_PASSWORD_HASH);
-    if (!row || !valid) {
+    if (!row || !valid || row.deleted_at) {
       throw new ApiException('INVALID_CREDENTIALS', '工号或密码不正确', 401);
     }
+    if (row.disabled_at)
+      throw new ApiException('ACCOUNT_DISABLED', '账号已停用，请联系管理员', 403);
     // Lock user against password reset while validating the password again and creating a session.
     return this.database.withTransaction(async (client) => {
       const current = await client.query<UserRow>('SELECT * FROM users WHERE id = $1 FOR UPDATE', [
         row.id,
       ]);
       const currentUser = current.rows[0];
-      if (!currentUser || currentUser.password_hash !== row.password_hash) {
+      if (
+        !currentUser ||
+        currentUser.disabled_at ||
+        currentUser.deleted_at ||
+        currentUser.password_hash !== row.password_hash
+      ) {
         throw new ApiException('INVALID_CREDENTIALS', '密码已更新，请使用新密码登录', 401);
       }
       return this.createSession(client, currentUser);
@@ -133,7 +144,8 @@ export class AuthService {
     >(
       `SELECT u.*, s.id AS session_id, s.expires_at FROM auth_sessions s
        JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()`,
+       WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
+       AND u.disabled_at IS NULL AND u.deleted_at IS NULL`,
       [hashToken(token)],
     );
     const row = result.rows[0];

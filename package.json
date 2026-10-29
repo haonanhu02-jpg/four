@@ -1,6 +1,6 @@
 {
   "name": "four-layer-workbench",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "description": "四层工作对齐工作台",
   "engines": {
@@ -21,6 +21,7 @@
     "test:integration": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:browser": "node tests/browser-stage5.mjs",
     "test:ui": "node tests/browser-stage6.mjs",
+    "test:features": "node scripts/test-features.mjs",
     "test:capacity": "node scripts/capacity.mjs .local/stage6-host.env",
     "release": "node deploy/release.mjs",
     "check": "npm run lint && npm run typecheck && npm run build",

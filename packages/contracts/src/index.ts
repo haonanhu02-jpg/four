@@ -4,6 +4,8 @@ export * from './insights';
 export * from './history';
 export * from './data-transfer';
 export * from './sample';
+export * from './admin';
+export * from './tabular-transfer';
 
 export const usernameSchema = z
   .string()
@@ -34,6 +36,7 @@ export type WorkItemType = 'annual' | 'monthly' | 'weekly' | 'daily';
 export interface PublicUser {
   id: string;
   username: string;
+  role: 'user' | 'admin';
   /** Read-only compatibility for profiles cached before employee-number login. */
   email?: string;
   timezone: string;
@@ -61,6 +64,7 @@ export type ApiErrorCode =
   | 'UNAUTHENTICATED'
   | 'INVALID_CREDENTIALS'
   | 'USERNAME_IN_USE'
+  | 'ACCOUNT_DISABLED'
   | 'RATE_LIMITED'
   | 'FORBIDDEN'
   | 'NOT_FOUND'

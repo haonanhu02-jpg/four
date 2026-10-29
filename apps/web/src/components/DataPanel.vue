@@ -12,8 +12,11 @@ import { request, errorMessage, ApiClientError } from '../lib/api';
 import { todayIn } from '../lib/dates';
 import { useWorkbenchStore } from '../stores/workbench';
 import * as local from '../lib/local-db';
+import { readTransferFile, downloadTransfer, type FileFormat } from '../lib/file-transfer';
 const board = useWorkbenchStore(),
   dialog = ref<HTMLDialogElement>();
+const exportDialog = ref<HTMLDialogElement>(),
+  exportFormat = ref<FileFormat>('xlsx');
 const busy = ref(false),
   error = ref(''),
   notice = ref(''),
@@ -77,16 +80,6 @@ async function resume() {
     clearJob = undefined;
   });
 }
-function download(doc: TransferDocument, label: string) {
-  const url = URL.createObjectURL(
-      new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }),
-    ),
-    a = window.document.createElement('a');
-  a.href = url;
-  a.download = `四层工作台-${label}-${todayIn()}.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 30000);
-}
 async function run(work: () => Promise<void>) {
   if (busy.value) return;
   busy.value = true;
@@ -118,8 +111,15 @@ async function open() {
   await run(backups);
 }
 async function exportData() {
-  await board.persistAll();
-  download(board.localDocument(), board.hasUnsaved ? '本机草稿' : '导出');
+  await run(async () => {
+    await board.persistAll();
+    await downloadTransfer(
+      board.localDocument(),
+      board.hasUnsaved ? '本机草稿' : '导出',
+      exportFormat.value,
+    );
+    exportDialog.value?.close();
+  });
 }
 async function prepare(doc: unknown, sourceMode = mode.value) {
   if (pendingBulk.value) throw new Error('请先重试确认上次批量操作，再开始新导入');
@@ -160,14 +160,10 @@ async function file(event: Event) {
     selected = input.files?.[0];
   if (!selected) return;
   await run(async () => {
-    if (selected.size > 5 * 1024 * 1024) throw new Error('文件不能超过 5 MiB');
-    let raw: unknown;
-    try {
-      raw = JSON.parse(await selected.text());
-    } catch {
-      throw new Error('文件不是有效的 JSON');
-    }
-    await prepare(raw);
+    preview.value = null;
+    document.value = null;
+    commitJob = undefined;
+    await prepare(await readTransferFile(selected, todayIn()));
   });
   input.value = '';
 }
@@ -332,10 +328,56 @@ onMounted(async () => {
 <template>
   <div class="wb-data-tools">
     <button class="wb-button" type="button" @click="open">数据管理</button
-    ><button class="wb-button" type="button" @click="exportData">
-      导出 JSON{{ board.hasUnsaved ? '（本机草稿）' : '' }}
+    ><button
+      class="wb-button"
+      type="button"
+      @click="
+        error = '';
+        exportDialog?.showModal();
+      "
+    >
+      导出数据{{ board.hasUnsaved ? '（本机草稿）' : '' }}
     </button>
   </div>
+  <dialog ref="exportDialog" class="wb-dialog wb-export-dialog" aria-labelledby="export-heading">
+    <div class="wb-dialog-top">
+      <h2 id="export-heading">导出数据</h2>
+      <button
+        type="button"
+        class="wb-icon-button"
+        aria-label="关闭导出"
+        :disabled="busy"
+        @click="exportDialog?.close()"
+      >
+        ×
+      </button>
+    </div>
+    <p>选择导出格式。导出包含当前账号的四层事项、原计划与关联关系；未同步的本机草稿一并保留。</p>
+    <div class="wb-export-formats" role="group" aria-label="导出格式">
+      <label
+        v-for="option in [
+          { value: 'xlsx', label: 'Excel（.xlsx）' },
+          { value: 'txt', label: '文本（.txt）' },
+          { value: 'docx', label: 'Word（.docx）' },
+          { value: 'json', label: 'JSON（.json）' },
+        ]"
+        :key="option.value"
+        ><input
+          v-model="exportFormat"
+          type="radio"
+          name="export-format"
+          :value="option.value"
+          :disabled="busy"
+        />{{ option.label }}</label
+      >
+    </div>
+    <p v-if="error" class="wb-banner wb-banner-error" role="alert">{{ error }}</p>
+    <div class="wb-dialog-actions">
+      <button type="button" class="wb-button primary" :disabled="busy" @click="exportData">
+        {{ busy ? '正在生成文件…' : '下载文件' }}
+      </button>
+    </div>
+  </dialog>
   <div v-if="pendingBulk" class="wb-banner wb-banner-error" role="alert">
     <span
       >上次{{
@@ -362,8 +404,13 @@ onMounted(async () => {
       </button>
     </div>
     <p>
-      支持原工作台 JSON（v1/v2）及新版 v3。导入先预检；替换、清空、恢复前自动备份。单文件最多 5 MiB
-      / 10000 条。
+      支持 Word（.docx）、Excel（.xlsx）、TXT 和
+      JSON（v1/v2/v3）。导入先预检；替换、清空、恢复前自动备份。单文件最多 5 MiB / 10000 条。
+    </p>
+    <p>
+      表格包含“标题”列，可选“层级、编号、上级编号、年度、月份、执行日期”等列；可先导出一份作为模板。Word
+      正文或普通 TXT 每段/每行作为一条日待办，日期默认为今天。旧版 .doc / .xls 请另存为 .docx /
+      .xlsx。
     </p>
     <p v-if="!board.isGuest">
       {{
@@ -382,9 +429,9 @@ onMounted(async () => {
           <option value="replace">替换，先自动备份</option>
         </select></label
       ><label class="wb-button"
-        >选择 JSON<input
+        >选择文件<input
           type="file"
-          accept=".json,application/json"
+          accept=".json,.txt,.docx,.xlsx,application/json,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           :disabled="busy"
           @change="file" /></label
       ><button type="button" class="wb-button" :disabled="busy" @click="sample">

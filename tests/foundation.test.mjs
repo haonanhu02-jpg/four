@@ -375,7 +375,7 @@ test('repeated wrong passwords are throttled by employee number and IP', async (
 test('database migrations can be run repeatedly without duplicating schema', async () => {
   await migrate(process.env.DATABASE_URL);
   const applied = await pool.query('SELECT count(*)::integer AS count FROM schema_migrations');
-  assert.equal(applied.rows[0].count, 5);
+  assert.equal(applied.rows[0].count, 6);
 });
 
 const chain = {};
@@ -1888,4 +1888,134 @@ test('stage6: cache snapshots and verified sessions expose a stable deployment g
   const other = await request('/data/cache', { cookie: users.get('bob').cookie });
   assert.ok(!other.body.document.items.annual.some((v) => v.id === record.id));
   assert.equal((await request('/data/cache')).response.status, 401);
+});
+
+const management = {};
+test('admin: permissions cannot be self-granted and account management is restricted', async () => {
+  assert.equal((await request('/admin/accounts')).response.status, 401);
+  for (const route of ['/admin/accounts', '/admin/logs'])
+    assert.equal(
+      (await request(route, { cookie: users.get('alice').cookie })).response.status,
+      403,
+    );
+  assert.equal(
+    (
+      await request('/auth/register', {
+        method: 'POST',
+        body: { username: 'elevate-' + randomUUID(), password: '123456', role: 'admin' },
+      })
+    ).response.status,
+    400,
+  );
+  management.actor = await register('manager');
+  await pool.query("UPDATE users SET role='admin' WHERE id=$1", [management.actor.id]);
+  assert.equal(
+    (await request('/auth/me', { cookie: management.actor.cookie })).body.user.role,
+    'admin',
+  );
+  const created = await request('/admin/accounts', {
+    method: 'POST',
+    cookie: management.actor.cookie,
+    body: { username: 'managed-' + randomUUID(), password: '123456', role: 'user' },
+  });
+  assert.equal(created.response.status, 201);
+  management.target = created.body;
+  assert.equal(
+    (
+      await request('/admin/accounts', {
+        method: 'POST',
+        cookie: management.actor.cookie,
+        body: { username: created.body.username, password: '123456' },
+      })
+    ).response.status,
+    409,
+  );
+  const list = await request('/admin/accounts?limit=1&search=' + created.body.username, {
+    cookie: management.actor.cookie,
+  });
+  assert.equal(list.body.total, 1);
+  assert.equal(list.body.items[0].id, created.body.id);
+  assert.ok(!JSON.stringify(list.body).includes('password_hash'));
+});
+
+test('admin: rename, reset, disable, delete and restore retain user data and revoke sessions', async () => {
+  const actor = management.actor,
+    target = management.target;
+  const operation = (action, body = {}) =>
+    request(`/admin/accounts/${target.id}/${action}`, {
+      method: 'POST',
+      cookie: actor.cookie,
+      body,
+    });
+  const login = async (username, password) =>
+    request('/auth/login', { method: 'POST', body: { username, password } });
+  const initial = await login(target.username, '123456');
+  let cookie = initial.response.headers.get('set-cookie').split(';')[0];
+  const goal = await createItem(
+    'annual',
+    { year: 2026, title: '管理员不能删除的业务数据' },
+    cookie,
+  );
+  const username = 'renamed-' + randomUUID();
+  assert.equal((await operation('update', { username })).response.status, 201);
+  assert.equal((await login(username, '123456')).body.user.id, target.id);
+  assert.equal((await operation('password', { password: '654321' })).response.status, 201);
+  assert.equal((await request('/auth/me', { cookie })).response.status, 401);
+  assert.equal((await login(username, '123456')).response.status, 401);
+  cookie = (await login(username, '654321')).response.headers.get('set-cookie').split(';')[0];
+  assert.equal((await operation('disable')).response.status, 201);
+  assert.equal((await request('/auth/me', { cookie })).response.status, 401);
+  assert.equal((await login(username, '654321')).body.error.code, 'ACCOUNT_DISABLED');
+  assert.equal((await operation('enable')).response.status, 201);
+  cookie = (await login(username, '654321')).response.headers.get('set-cookie').split(';')[0];
+  assert.equal((await operation('delete')).response.status, 201);
+  assert.equal((await request('/auth/me', { cookie })).response.status, 401);
+  assert.equal((await login(username, '654321')).response.status, 401);
+  assert.equal(
+    (await pool.query('SELECT title FROM annual_goals WHERE id=$1', [goal.id])).rows[0].title,
+    '管理员不能删除的业务数据',
+  );
+  assert.equal((await operation('restore')).response.status, 201);
+  assert.equal((await login(username, '654321')).body.user.id, target.id);
+  const logs = await request('/admin/logs?search=' + username, { cookie: actor.cookie });
+  for (const action of ['update', 'reset_password', 'disable', 'enable', 'delete', 'restore'])
+    assert.ok(logs.body.items.some((l) => l.action === action));
+  const raw = JSON.stringify(logs.body);
+  for (const secret of ['123456', '654321', 'password_hash']) assert.ok(!raw.includes(secret));
+  assert.ok(logs.body.items.every((l) => l.actorId === actor.id && l.requestId && l.ip));
+  await assert.rejects(
+    pool.query("UPDATE admin_audit_logs SET ip='tampered' WHERE target_id=$1", [target.id]),
+    { code: 'P0001' },
+  );
+  await assert.rejects(pool.query('DELETE FROM admin_audit_logs WHERE target_id=$1', [target.id]), {
+    code: 'P0001',
+  });
+});
+
+test('admin: concurrent actions cannot remove the last enabled administrator', async () => {
+  const actor = management.actor,
+    other = await register('other-manager');
+  await pool.query("UPDATE users SET role='admin' WHERE id=$1", [other.id]);
+  const results = await Promise.all(
+    [actor, other].map((a) =>
+      request(`/admin/accounts/${a.id}/disable`, { method: 'POST', cookie: a.cookie, body: {} }),
+    ),
+  );
+  assert.deepEqual(results.map((r) => r.response.status).sort(), [201, 409]);
+  const remaining = await pool.query(
+    "SELECT id FROM users WHERE role='admin' AND disabled_at IS NULL AND deleted_at IS NULL",
+  );
+  assert.equal(remaining.rowCount, 1);
+  const last = remaining.rows[0].id === actor.id ? actor : other;
+  for (const [action, body] of [
+    ['update', { role: 'user' }],
+    ['delete', {}],
+  ]) {
+    const denied = await request(`/admin/accounts/${last.id}/${action}`, {
+      method: 'POST',
+      cookie: last.cookie,
+      body,
+    });
+    assert.equal(denied.response.status, 409);
+  }
 });

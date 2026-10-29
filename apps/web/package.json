@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "@workbench/contracts": "0.1.0",
+    "docx": "^9.15.0",
+    "exceljs": "^4.4.0",
+    "mammoth": "^1.13.0",
     "pinia": "^4.1.0",
     "vue": "^3.5.44"
   },

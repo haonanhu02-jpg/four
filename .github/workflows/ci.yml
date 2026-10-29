@@ -63,6 +63,9 @@ jobs:
       - name: Verify themes, installation resources and safe updates
         run: CHROME_PATH="$(command -v google-chrome || command -v chromium)" npm run test:ui
 
+      - name: Verify Office transfers, account management and audit UI
+        run: CHROME_PATH="$(command -v google-chrome || command -v chromium)" npm run test:features
+
       - name: Run optional isolated capacity verification
         if: github.event_name == 'workflow_dispatch' && inputs.capacity
         run: |
@@ -80,6 +83,8 @@ jobs:
             artifacts/stage5/browser-check.json
             artifacts/stage5/*.png
             artifacts/stage6/ui/
+            artifacts/admin-formats/browser/browser-check.json
+            artifacts/admin-formats/browser/*.png
             artifacts/stage6/capacity.json
           if-no-files-found: ignore
 
