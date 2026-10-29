@@ -372,7 +372,10 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     await set('[aria-label="管理账号工号"]', username);
     await set('[aria-label="管理账号密码"]', '123456');
     await clickText('确认保存');
-    await waitFor('!document.querySelector(".wb-admin-editor")', 'admin create');
+    await waitFor(
+      '!document.querySelector(".wb-admin-editor") && document.querySelector(".wb-admin-filters button[type=submit]")?.disabled === false',
+      'admin create',
+    );
     const targetId = await evaluate(
       '[...document.querySelectorAll("tr[data-account-id]")].find(e=>e.textContent.includes(' +
         JSON.stringify(username) +
@@ -389,15 +392,24 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     await targetButton('修改');
     await set('[aria-label="管理账号工号"]', username + '-renamed');
     await clickText('确认保存');
-    await waitFor('!document.querySelector(".wb-admin-editor")', 'admin rename');
+    await waitFor(
+      '!document.querySelector(".wb-admin-editor") && document.querySelector(".wb-admin-filters button[type=submit]")?.disabled === false',
+      'admin rename',
+    );
     await targetButton('重置密码');
     await set('[aria-label="管理账号密码"]', '654321');
     await clickText('确认保存');
-    await waitFor('!document.querySelector(".wb-admin-editor")', 'admin password');
+    await waitFor(
+      '!document.querySelector(".wb-admin-editor") && document.querySelector(".wb-admin-filters button[type=submit]")?.disabled === false',
+      'admin password',
+    );
     for (const text of ['停用', '启用', '删除']) {
       await targetButton(text);
       await clickText('确认保存');
-      await waitFor('!document.querySelector(".wb-admin-editor")', 'admin ' + text);
+      await waitFor(
+        '!document.querySelector(".wb-admin-editor") && document.querySelector(".wb-admin-filters button[type=submit]")?.disabled === false',
+        'admin ' + text,
+      );
     }
     await evaluate(
       '(()=>{const e=document.querySelector(\'[aria-label="账号状态筛选"]\');e.value="deleted";e.dispatchEvent(new Event("change",{bubbles:true}));})()',
@@ -409,7 +421,10 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     );
     await targetButton('恢复');
     await clickText('确认保存');
-    await waitFor('!document.querySelector(".wb-admin-editor")', 'admin restore');
+    await waitFor(
+      '!document.querySelector(".wb-admin-editor") && document.querySelector(".wb-admin-filters button[type=submit]")?.disabled === false',
+      'admin restore',
+    );
     await clickText('管理日志');
     await waitFor(
       'document.querySelector(".wb-admin-table")?.textContent.includes("恢复账号")',
