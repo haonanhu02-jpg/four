@@ -71,7 +71,7 @@ def main():
     assert original_roster == roster(), "Account IDs and password hashes must survive repeat deployment"
     assert set((root / "backups").glob("*.dump")) == before_backups, "Unchanged version should reuse its cache without redundant backups"
     request("/auth/login", dict(username=username, password=password))
-    assert request("/work-items/annual/" + goal["id"])["title"] == goal["title"]
+    assert request("/work-items/annual/" + goal["id"])["item"]["title"] == goal["title"]
 
     # Stop all containers, then change the port to exercise recovery and backup.
     docker.compose("stop")
@@ -83,7 +83,7 @@ def main():
     assert private == {k: config[k] for k in private}
     assert credentials == {p.name: deploy.sha256(p) for p in root.glob("admin-credentials-*.txt")}
     assert request("/auth/login", dict(username=username, password=password))["user"]["id"] == user["id"]
-    assert request("/work-items/annual/" + goal["id"])["title"] == goal["title"]
+    assert request("/work-items/annual/" + goal["id"])["item"]["title"] == goal["title"]
     backups = set((root / "backups").glob("*.dump")) - before_backups
     assert len(backups) == 1, "Configuration change must first create a database backup"
     backup = backups.pop()
