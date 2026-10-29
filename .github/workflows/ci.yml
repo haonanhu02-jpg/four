@@ -14,6 +14,30 @@ permissions:
   contents: read
 
 jobs:
+  deployment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Test verified image deployment, reruns, backups and failed downloads
+        run: python tests/deploy_smoke.py --dir "$RUNNER_TEMP/deploy-check" --project four-deploy-check-ci --port 18080 --direct
+      - name: Keep sanitized deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-verification
+          path: ${{ runner.temp }}/deploy-check/smoke-result.json
+          if-no-files-found: ignore
+      - name: Stop isolated deployment
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/deploy-check/state.json" ]; then
+            release_dir=$(python -c 'import json,os; print(json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"deploy-check/state.json")))["releaseDir"])')
+            docker compose --project-name four-deploy-check-ci --env-file "$RUNNER_TEMP/deploy-check/.env.production" -f "$release_dir/compose.production.yaml" --profile database down
+          fi
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -29,6 +53,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Set up deployment script runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Verify repeatable deployment and safe downloads
+        run: python -m unittest discover -s tests -p 'test_auto_deploy.py' -v
 
       - name: Prepare isolated test configuration
         run: node deploy/init-env.mjs

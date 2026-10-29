@@ -6,6 +6,8 @@ dist/
 coverage/
 artifacts/
 .local/
+__pycache__/
+.deployment/
 admin-credentials*.txt
 *.tsbuildinfo
 *.log

@@ -10,6 +10,12 @@ Vue 3 + TypeScript + Vite 前端、NestJS 后端、PostgreSQL 数据库的工作
 
 ## 下载镜像与生产部署
 
+推荐使用[一键部署脚本](deploy/auto-deploy.py)：自动经国内可用加速通道获取最新正式 Release 的源码及三个预构建镜像，校验后完成启动、迁移、管理员初始化与健康检查。以后运行同一命令即可更新，保留数据库和配置；已有实例变更前自动备份。宿主机需要 Python 3.10+、curl、Docker 与 Compose 2.20+，不需要 Node.js/npm。详见[一键部署说明](docs/一键部署.md)。
+
+```sh
+python3 deploy/auto-deploy.py --dir "$HOME/four-workbench-deployment"
+```
+
 已验证的 Linux amd64 镜像及完整运行包见 [v1.1.0 Releases](https://github.com/haonanhu02-jpg/four/releases/tag/v1.1.0)。源码版本为 Git 标签 `v1.1.0`；`main` 分支会继续更新。
 
 - [完整交付包](https://github.com/haonanhu02-jpg/four/releases/download/v1.1.0/four-layer-workbench-1.1.0-linux-amd64.tar.gz)：包含 API、web、PostgreSQL 18 镜像、源码、生产 Compose、配置模板、备份恢复工具及验收摘要。

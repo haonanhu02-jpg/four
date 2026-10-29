@@ -38,7 +38,11 @@ for (const dir of folders) {
   for (const path of await filesAt(join(root, dir))) {
     const rel = relative(root, path).replaceAll('\\', '/');
     if (
-      !rel.split('/').some((p) => ['node_modules', 'dist', '.local', '.git'].includes(p)) &&
+      !rel
+        .split('/')
+        .some((p) =>
+          ['node_modules', 'dist', '.local', '.git', '__pycache__', '.deployment'].includes(p),
+        ) &&
       (!rel.split('/').at(-1).startsWith('.env') || rel.endsWith('.env.example'))
     )
       files.push(rel);
@@ -171,6 +175,9 @@ for (const name of [
   'init-production.mjs',
   'verify-release.mjs',
   'https.nginx.example.conf',
+  'auto-deploy.py',
+  'auto-deploy.sh',
+  'auto-deploy.ps1',
 ])
   await copyFile(join(root, 'deploy', name), join(output, 'deploy', name));
 await copyFile(join(root, 'compose.production.yaml'), join(output, 'compose.production.yaml'));
@@ -185,6 +192,7 @@ for (const name of [
   '阶段6-验收记录.md',
   '工号登录改造-验收记录.md',
   '管理员与文件管理-验收记录.md',
+  '一键部署.md',
 ])
   await copyFile(join(root, 'docs', name), join(output, 'docs', name));
 await writeFile(
