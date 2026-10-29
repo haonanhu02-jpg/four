@@ -74,7 +74,20 @@ after(async () => {
   if (app) await app.close();
   if (pool) await pool.end();
   if (admin) {
-    await admin.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
+    // Pool shutdown can resolve before PostgreSQL observes every socket close.
+    // Wait for the server to see the disconnects instead of killing closing clients.
+    let remaining = 0;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      remaining = (
+        await admin.query('SELECT count(*)::int n FROM pg_stat_activity WHERE datname=$1', [
+          databaseName,
+        ])
+      ).rows[0].n;
+      if (!remaining) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(remaining, 0, 'Integration database connections must close before teardown');
+    await admin.query(`DROP DATABASE IF EXISTS "${databaseName}"`);
     await admin.end();
   }
 });
