@@ -173,6 +173,13 @@ class DeploymentTests(unittest.TestCase):
         with self.assertRaises(deploy.DeployError):
             deploy.configure(deploy.arguments([]), self.root, new)
 
+    def test_failed_upgrade_also_prevents_downgrade_after_possible_migrations(self):
+        deploy.guard_downgrade("1.2.0", dict(version="1.1.0"), dict(version="1.2.0"))
+        with self.assertRaises(deploy.DeployError):
+            deploy.guard_downgrade("1.1.0", dict(version="1.1.0"), dict(version="1.2.0"))
+        with self.assertRaises(deploy.DeployError):
+            deploy.guard_downgrade("1.0.0", dict(version="1.1.0"), None)
+
     def test_failed_mirror_or_bad_hash_falls_back_without_partial_files(self):
         target = self.root / "download"
         calls = []

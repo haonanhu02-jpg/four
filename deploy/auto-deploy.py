@@ -516,6 +516,13 @@ def health_check(config, version):
     log("页面、Web 和 API 健康检查通过。")
 
 
+def guard_downgrade(version, *records):
+    requested = tuple(map(int, version.split(".")))
+    for record in records:
+        if record and requested < tuple(map(int, record["version"].split("."))):
+            raise DeployError("拒绝自动降级：成功或未完成的更高版本可能已经迁移数据库，请按恢复说明另建环境。")
+
+
 def deploy(args):
     for tool in ("docker", "curl"):
         if not shutil.which(tool):
@@ -538,8 +545,8 @@ def deploy(args):
         release, manifest, checksum = prepare_release(args, root)
         config_path, config = configure(args, root, manifest)
         previous = read_json(root / "state.json") if (root / "state.json").exists() else None
-        if previous and tuple(map(int, manifest["version"].split("."))) < tuple(map(int, previous["version"].split("."))):
-            raise DeployError("拒绝自动降级数据库和应用；请先按恢复说明另建环境。")
+        pending = read_json(root / "pending.json") if (root / "pending.json").exists() else None
+        guard_downgrade(manifest["version"], previous, pending)
         docker = Docker(root, release, config)
         log("检查运行镜像（整个过程不构建镜像）。")
         if not all(docker.image_matches(i) for i in manifest["images"]):
