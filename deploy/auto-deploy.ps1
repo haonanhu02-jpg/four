@@ -5,7 +5,7 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
 } elseif (Get-Command py -ErrorAction SilentlyContinue) {
     & py -3 $scriptPath @args
 } else {
-    Write-Error '需要 Python 3.10 或更新版本；请先安装 Python。'
+    Write-Error 'Python 3.10 or newer is required. Install Python before running this script.'
     exit 1
 }
 exit $LASTEXITCODE
