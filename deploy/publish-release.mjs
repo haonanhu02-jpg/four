@@ -45,6 +45,13 @@ await run([
 await run(['node', 'deploy/init-env.mjs']);
 const output = `artifacts/releases/release-${version}`;
 await mkdir('artifacts/releases', { recursive: true });
+const postgresImage = (await readFile('deploy/production.env.example', 'utf8'))
+  .split('\n')
+  .find((line) => line.startsWith('POSTGRES_IMAGE='))
+  ?.slice('POSTGRES_IMAGE='.length)
+  .trim();
+if (!postgresImage) throw Error('A pinned PostgreSQL runtime image is required');
+await run(['docker', 'pull', postgresImage]);
 await run(['node', 'deploy/release.mjs', output, 'artifacts/release-verification']);
 const manifest = JSON.parse(await readFile(output + '/release.json', 'utf8'));
 assert.equal(manifest.gitCommit, capture(['git', 'rev-parse', 'HEAD']).trim());
