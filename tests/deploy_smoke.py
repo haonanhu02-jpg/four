@@ -22,12 +22,19 @@ def main():
     parser.add_argument("--project", required=True)
     parser.add_argument("--port", type=int, default=18080)
     parser.add_argument("--direct", action="store_true")
+    parser.add_argument("--shell-source", action="store_true")
     args = parser.parse_args()
     if not args.project.startswith("four-deploy-check-"):
         parser.error("This test must use an isolated four-deploy-check-* project")
     root = Path(args.dir).resolve()
     script = Path(__file__).resolve().parents[1] / "deploy/auto-deploy.py"
     command = [sys.executable, str(script), "--dir", str(root), "--project", args.project]
+    if args.shell_source:
+        command = ["bash", "--noprofile", "--norc", "-c",
+                   'if source "$1" "${@:2}"; then result=0; else result=$?; fi; '
+                   'printf "SOURCE_RETURNED:%s\\n" "$result"; exit "$result"',
+                   "source-deployment-test", str(script.with_suffix('.sh')),
+                   "--dir", str(root), "--project", args.project]
     if args.direct:
         command.append("--direct")
 
@@ -35,6 +42,8 @@ def main():
         result = subprocess.run(command + list(options), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=1000)
         output = result.stdout.decode("utf-8", errors="replace")
         print(output, flush=True)
+        if args.shell_source:
+            assert "SOURCE_RETURNED:" + str(expected) in output, "source must return to the calling shell"
         if result.returncode != expected:
             raise AssertionError("Deployment exit code " + str(result.returncode))
 

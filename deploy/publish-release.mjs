@@ -158,6 +158,9 @@ if (
 ) {
   for (const name of ['auto-deploy.py', 'auto-deploy.sh', 'auto-deploy.ps1'])
     deploymentAssets.push(output + '/deploy/' + name);
+  const sourceShell = 'artifacts/releases/source-deploy.sh';
+  await writeFile(sourceShell, await readFile(output + '/deploy/auto-deploy.sh'));
+  deploymentAssets.push(sourceShell);
   const guide = 'artifacts/releases/auto-deploy-guide.md';
   await writeFile(guide, await readFile(output + '/docs/一键部署.md'));
   deploymentAssets.push(guide);

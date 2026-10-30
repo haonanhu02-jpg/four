@@ -22,8 +22,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Verify source-compatible Shell deployment entry
+        run: python -m unittest discover -s tests -p 'test_shell_deploy.py' -v
       - name: Test verified image deployment, reruns, backups and failed downloads
-        run: python tests/deploy_smoke.py --dir "$RUNNER_TEMP/deploy-check" --project four-deploy-check-ci --port 18080 --direct
+        run: python tests/deploy_smoke.py --dir "$RUNNER_TEMP/deploy-check" --project four-deploy-check-ci --port 18080 --direct --shell-source
       - name: Keep sanitized deployment evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -18,6 +18,8 @@ Vue 3 + TypeScript + Vite 前端、NestJS 后端、PostgreSQL 数据库的工作
 python3 deploy/auto-deploy.py --dir "$HOME/four-workbench-deployment"
 ```
 
+Linux Bash 也可使用 `source ./deploy/auto-deploy.sh --dir "$HOME/four-workbench-deployment"`。单独下载 Shell 入口时会自动获取并校验部署程序；用法及下载链接见[一键部署说明](docs/一键部署.md)。
+
 已验证的 Linux amd64 镜像及完整运行包见 [v1.1.1 Releases](https://github.com/haonanhu02-jpg/four/releases/tag/v1.1.1)。源码版本为 Git 标签 `v1.1.1`；`main` 分支会继续更新。
 
 - [完整交付包](https://github.com/haonanhu02-jpg/four/releases/download/v1.1.1/four-layer-workbench-1.1.1-linux-amd64.tar.gz)：包含 API、web、PostgreSQL 18 镜像、源码、生产 Compose、配置模板、备份恢复工具及验收摘要。
