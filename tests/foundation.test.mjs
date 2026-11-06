@@ -388,7 +388,7 @@ test('repeated wrong passwords are throttled by employee number and IP', async (
 test('database migrations can be run repeatedly without duplicating schema', async () => {
   await migrate(process.env.DATABASE_URL);
   const applied = await pool.query('SELECT count(*)::integer AS count FROM schema_migrations');
-  assert.equal(applied.rows[0].count, 6);
+  assert.equal(applied.rows[0].count, 7);
 });
 
 const chain = {};
@@ -420,6 +420,187 @@ async function updateItem(
   assert.ok(result.response.ok, `Update ${value.type}: ${JSON.stringify(result.body)}`);
   return result.body.item;
 }
+
+async function featureAccount(label) {
+  // Feature fixtures do not consume the registration throttle budget exercised
+  // independently above. Authenticate normally after seeding the isolated DB.
+  const username = `${label}-${randomUUID()}`,
+    password = 'Test-password-123!';
+  const row = await pool.query(
+    'INSERT INTO users(username,password_hash) VALUES($1,$2) RETURNING id',
+    [username, await hashPassword(password)],
+  );
+  const login = await request('/auth/login', { method: 'POST', body: { username, password } });
+  assert.ok(login.response.ok);
+  return {
+    id: row.rows[0].id,
+    username,
+    password,
+    cookie: login.response.headers.get('set-cookie').split(';')[0],
+  };
+}
+test('five views: annual auto mode is owner scoped, reversible and reacts to child edits, delete and restore', async () => {
+  const account = await featureAccount('rollup');
+  let goal = await createItem(
+    'annual',
+    {
+      year: 2036,
+      title: '自动目标',
+      progress: 37,
+      weight: 100,
+      progressMode: 'auto',
+      dueDate: '2036-12-31',
+    },
+    account.cookie,
+  );
+  const m1 = await createItem(
+    'monthly',
+    { month: '2036-11', progress: 100, weight: 25, parentId: goal.id },
+    account.cookie,
+  );
+  const m2 = await createItem(
+    'monthly',
+    { month: '2037-01', progress: 20, weight: 75, parentId: goal.id },
+    account.cookie,
+  );
+  await createItem(
+    'monthly',
+    { month: '2036-12', progress: 100, weight: 0, parentId: goal.id },
+    account.cookie,
+  );
+  const route = '/overview?year=2036&month=2036-11&start=2036-11-03&end=2036-11-09&date=2036-11-04';
+  const progress = async () => (await request(route, { cookie: account.cookie })).body.annual.value;
+  assert.equal(await progress(), 40);
+  assert.equal((await currentItem(goal, account.cookie)).progress, 37);
+  await updateItem(m2, { progress: 60 }, account.cookie);
+  assert.equal(await progress(), 70);
+  const removed = await request(`/work-items/monthly/${m1.id}/delete`, {
+    method: 'POST',
+    cookie: account.cookie,
+    body: { operationId: randomUUID(), baseVersion: m1.version },
+  });
+  assert.ok(removed.response.ok);
+  assert.equal(await progress(), 60);
+  const restored = await request(`/work-items/monthly/${m1.id}/restore`, {
+    method: 'POST',
+    cookie: account.cookie,
+    body: { operationId: randomUUID(), baseVersion: removed.body.item.version },
+  });
+  assert.ok(restored.response.ok);
+  assert.equal(await progress(), 70);
+  goal = await updateItem(goal, { progressMode: 'manual' }, account.cookie);
+  assert.equal(await progress(), 37);
+  await updateItem(goal, { progressMode: 'auto' }, account.cookie);
+  assert.equal(await progress(), 70);
+  const exported = (await request('/data/export', { cookie: account.cookie })).body;
+  assert.equal(exported.items.annual[0].progressMode, 'auto');
+  assert.equal(exported.items.annual[0].progress, 37);
+  assert.equal(exported.items.annual[0].dueDate, '2036-12-31');
+  const empty = await createItem(
+    'annual',
+    { year: 2038, progressMode: 'auto', progress: 91, weight: 100 },
+    account.cookie,
+  );
+  assert.equal(
+    Number(
+      (
+        await pool.query('SELECT annual_progress_value($1,$2,$3,$4) AS value', [
+          account.id,
+          empty.id,
+          'auto',
+          91,
+        ])
+      ).rows[0].value,
+    ),
+    0,
+  );
+  await createItem(
+    'monthly',
+    { month: '2038-01', progress: 100, weight: 0, parentId: empty.id },
+    account.cookie,
+  );
+  assert.equal(
+    Number(
+      (
+        await pool.query('SELECT annual_progress_value($1,$2,$3,$4) AS value', [
+          account.id,
+          empty.id,
+          'auto',
+          91,
+        ])
+      ).rows[0].value,
+    ),
+    0,
+  );
+});
+
+test('five views: daily work details survive cloud export, replace, backup restore and immutable history', async () =>
+  atTime('2037-01-02T02:00:00Z', async () => {
+    const account = await featureAccount('worklog');
+    const goal = await createItem(
+      'annual',
+      { year: 2036, progressMode: 'auto', progress: 17, weight: 100 },
+      account.cookie,
+    );
+    const month = await createItem(
+      'monthly',
+      { month: '2036-12', progress: 100, weight: 100, parentId: goal.id },
+      account.cookie,
+    );
+    const day = await createItem(
+      'daily',
+      {
+        date: '2036-12-31',
+        title: '工作记录',
+        time: '09:30–11:00',
+        note: '工作情况\n第二行',
+        minutes: 60,
+      },
+      account.cookie,
+    );
+    const seal = await request('/history/periods', {
+      method: 'POST',
+      cookie: account.cookie,
+      body: { periodType: 'year', start: '2036-01-01', end: '2036-12-31' },
+    });
+    assert.ok(seal.response.ok);
+    await updateItem(month, { progress: 40 }, account.cookie);
+    const frozen = (await request(`/history/periods/${seal.body.id}`, { cookie: account.cookie }))
+      .body;
+    const annual = frozen.items.find((v) => v.item.id === goal.id);
+    assert.equal(annual.item.calculatedProgress, 100);
+    assert.equal(annual.item.progress, 17);
+    const frozenCompletion = await pool.query(
+      'SELECT completed FROM period_snapshot_items WHERE snapshot_id=$1 AND item_id=$2',
+      [seal.body.id, goal.id],
+    );
+    assert.equal(frozenCompletion.rows[0].completed, true);
+    const frozenDay = frozen.items.find((v) => v.item.id === day.id);
+    assert.equal(frozenDay.item.time, '09:30–11:00');
+    assert.equal(frozenDay.item.note, '工作情况\n第二行');
+    const exported = (await request('/data/export', { cookie: account.cookie })).body;
+    const preview = await previewData(account, exported, 'replace');
+    const committed = await commitData(account, preview);
+    assert.ok(committed.response.ok);
+    const actual = (await request('/data/export', { cookie: account.cookie })).body;
+    const current = actual.items.daily.find((v) => !v.deletedAt && v.title === '工作记录');
+    assert.equal(current.time, '09:30–11:00');
+    assert.equal(current.note, '工作情况\n第二行');
+    assert.equal(current.minutes, 60);
+    const backupPreview = await request(`/data/backups/${committed.body.backupId}/preview`, {
+      method: 'POST',
+      cookie: account.cookie,
+      body: {},
+    });
+    assert.ok(backupPreview.response.ok);
+    const restored = await commitData(account, backupPreview.body);
+    assert.ok(restored.response.ok);
+    const restoredDay = (
+      await request('/data/export', { cookie: account.cookie })
+    ).body.items.daily.find((v) => v.id === day.id);
+    assert.equal(restoredDay.time, '09:30–11:00');
+    assert.equal(restoredDay.note, '工作情况\n第二行');
+  }));
 
 test('stage2: create, edit and complete the full four-level chain with exact business dates', async () => {
   const alice = users.get('alice');

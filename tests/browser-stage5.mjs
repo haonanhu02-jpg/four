@@ -161,11 +161,13 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
           JSON.stringify(value) +
           ';e.dispatchEvent(new Event("input",{bubbles:true}));})()',
       );
-    const ready = () =>
-      waitFor(
+    const ready = async () => {
+      await waitFor(
         '!!document.querySelector(".workbench")&&!document.querySelector(".wb-loading")',
         'board ready',
       );
+      await click('[data-view=weekly]');
+    };
     const saved = () =>
       waitFor(
         'document.querySelector(".wb-cloud")?.textContent.includes("所有更改已保存")&&!document.querySelector(".wb-loading")',
@@ -296,18 +298,18 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     await waitFor('!!document.querySelector("[data-add-type=annual]")', 'annual view');
     await click('[data-add-type=annual]');
     await waitFor(
-      'document.querySelectorAll(".wb-item-annual").length===5',
+      'document.querySelectorAll("tr[data-type=annual]").length===5',
       'offline annual created',
     );
     await persisted();
     const annual = await evaluate(
-      'document.querySelectorAll(".wb-item-annual [data-title-id]")[4].getAttribute("data-title-id")',
+      'document.querySelectorAll("tr[data-type=annual] [data-title-id]")[4].getAttribute("data-title-id")',
     );
     await set('[data-title-id="' + annual + '"]', '离线新增年度');
     await persisted();
-    await click('.wb-item-annual:last-child .wb-item-footer .wb-link');
+    await click('tr[data-type=annual]:last-child .wb-table-row-actions .wb-link');
     await waitFor(
-      'document.querySelectorAll(".wb-item-monthly").length===7',
+      'document.querySelectorAll("tr[data-type=monthly]").length===7',
       'offline month created',
     );
     await persisted();
@@ -318,7 +320,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     );
     await set('[data-title-id="' + monthly + '"]', '离线新增月度');
     await persisted();
-    await click('[data-item-id="' + monthly + '"] .wb-item-footer .wb-link');
+    await click('[data-item-id="' + monthly + '"] .wb-table-row-actions .wb-link');
     await waitFor(
       'document.querySelectorAll(".wb-item-weekly").length===8',
       'offline week created',

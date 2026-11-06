@@ -44,7 +44,8 @@ const executionTree = `WITH roots AS (
 // Scope follows the selected year/month/intersecting interval/day. A missing
 // weekly/daily breakdown is tested inside the selected interval, not all time.
 const alignmentTree = `WITH a AS (
-  SELECT * FROM annual_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL
+  SELECT *,annual_progress_value(user_id,id,progress_mode,progress) AS effective_progress
+  FROM annual_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL
 ), m AS (
   SELECT * FROM monthly_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL
 ), w AS (
@@ -70,10 +71,11 @@ const alignmentTree = `WITH a AS (
   UNION ALL SELECT 'daily_without_weekly',s.* FROM scoped s
     WHERE type='daily' AND NOT EXISTS (SELECT 1 FROM w WHERE w.id=(s.data->>'weekly_task_id')::uuid)
   UNION ALL SELECT 'parent_complete',s.* FROM scoped s WHERE
-    (type='monthly' AND (s.data->>'progress')::numeric<100 AND EXISTS (SELECT 1 FROM a WHERE a.id=(s.data->>'annual_goal_id')::uuid AND a.progress=100)) OR
+    (type='monthly' AND (s.data->>'progress')::numeric<100 AND EXISTS (SELECT 1 FROM a WHERE a.id=(s.data->>'annual_goal_id')::uuid AND a.effective_progress=100)) OR
     (type='weekly' AND s.data->>'status'<>'done' AND EXISTS (SELECT 1 FROM m WHERE m.id=(s.data->>'monthly_goal_id')::uuid AND m.progress=100)) OR
     (type='daily' AND NOT (s.data->>'done')::boolean AND EXISTS (SELECT 1 FROM w WHERE w.id=(s.data->>'weekly_task_id')::uuid AND w.status='done'))
   UNION ALL SELECT 'overdue',s.* FROM scoped s WHERE
+    (type='annual' AND (s.data->>'effective_progress')::numeric<100 AND (s.data->>'due_date')::date<$7::date) OR
     (type='monthly' AND (s.data->>'progress')::numeric<100 AND (s.data->>'due_date')::date<$7::date) OR
     (type='weekly' AND s.data->>'status'<>'done' AND (s.data->>'current_end')::date<$7::date) OR
     (type='daily' AND NOT (s.data->>'done')::boolean AND (s.data->>'scheduled_date')::date<$7::date)
@@ -102,11 +104,16 @@ export class InsightsService {
         period: number | string,
       ): Promise<Metric> => {
         const column = table === 'annual_goals' ? 'year' : 'current_month';
+        const source =
+          table === 'annual_goals'
+            ? '(SELECT *,annual_progress_value(user_id,id,progress_mode,progress) AS effective_progress FROM annual_goals) AS goals'
+            : table;
+        const progress = table === 'annual_goals' ? 'effective_progress' : 'progress';
         const result = await client.query(
           `SELECT count(*)::int AS total,
-          count(*) FILTER (WHERE progress=100)::int AS completed, coalesce(sum(weight),0) AS weight,
-          round(sum(progress*weight) / nullif(sum(weight),0)) AS value
-          FROM ${table} WHERE user_id=$1 AND ${column}=$2 AND deleted_at IS NULL AND archived_at IS NULL`,
+          count(*) FILTER (WHERE ${progress}=100)::int AS completed, coalesce(sum(weight),0) AS weight,
+          round(sum(${progress}*weight) / nullif(sum(weight),0)) AS value
+          FROM ${source} WHERE user_id=$1 AND ${column}=$2 AND deleted_at IS NULL AND archived_at IS NULL`,
           [userId, period],
         );
         const r = result.rows[0];

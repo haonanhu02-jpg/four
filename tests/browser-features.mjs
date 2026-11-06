@@ -179,6 +179,10 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     source.items.weekly[0].endDate = today;
     source.items.daily[0].date = today;
     source.items.weekly[0].note = '多行说明\n第二行\t带制表符 "引号"';
+    source.items.annual[0].progressMode = 'auto';
+    source.items.annual[0].dueDate = `${today.slice(0, 4)}-12-31`;
+    source.items.daily[0].time = '09:30–11:00';
+    source.items.daily[0].note = '每日工作情况\n第二行';
     const Excel = (await import('exceljs')).default,
       workbook = new Excel.Workbook();
     const sheet = workbook.addWorksheet('工作台');
@@ -325,6 +329,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       evaluate(
         String.raw`(()=>{const lum=c=>{const v=c.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4});return .2126*v[0]+.7152*v[1]+.0722*v[2]};return [...document.querySelectorAll('.wb-choice-option')].map(e=>{const s=getComputedStyle(e),a=lum(s.color),b=lum(s.backgroundColor);return(Math.max(a,b)+.05)/(Math.min(a,b)+.05)});})()`,
       );
+    await evaluate("document.querySelector('[data-view=weekly]').click()");
     for (const label of ['周任务优先级', '周任务状态']) {
       await evaluate(
         'document.querySelector(\'[aria-label="' + label + '"]\').scrollIntoView({block:"center"})',

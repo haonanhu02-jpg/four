@@ -80,6 +80,8 @@ export interface VersionConflictDetails {
   currentRecord?: unknown;
 }
 
+export * from './progress';
+
 export const API = {
   health: '/api/health',
   me: '/api/auth/me',

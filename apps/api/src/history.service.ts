@@ -72,6 +72,16 @@ export class HistoryService {
     @Inject(RolloverClock) private readonly clock: RolloverClock,
   ) {}
   async frozen(client: PoolClient, userId: string, value: WorkItem): Promise<FrozenItem> {
+    const freezeProgress = async (v: WorkItem) => {
+      if (v.type !== 'annual' || v.progressMode !== 'auto') return v;
+      const rows = await client.query('SELECT annual_progress_value($1,$2,$3,$4) AS progress', [
+        userId,
+        v.id,
+        v.progressMode,
+        v.progress,
+      ]);
+      return { ...v, calculatedProgress: Number(rows.rows[0].progress) };
+    };
     const ancestors: WorkItem[] = [];
     let current = value;
     for (let depth = 0; depth < 3 && current.parentId; depth++) {
@@ -83,9 +93,9 @@ export class HistoryService {
       );
       if (!result.rows[0]) break;
       current = item(parent, result.rows[0]);
-      ancestors.push(current);
+      ancestors.push(await freezeProgress(current));
     }
-    return { item: value, ancestors };
+    return { item: await freezeProgress(value), ancestors };
   }
   private key(p: PeriodDefinition) {
     return p.periodType === 'year'
@@ -152,10 +162,20 @@ export class HistoryService {
               ? `t.current_start<=$4::date AND t.current_end>=$3::date`
               : `t.scheduled_date BETWEEN $3::date AND $4::date`;
       const done =
-        type === 'daily' ? 't.done' : type === 'weekly' ? `t.status='done'` : 't.progress=100';
+        type === 'annual'
+          ? 'annual_progress_value(t.user_id,t.id,t.progress_mode,t.progress)=100'
+          : type === 'daily'
+            ? 't.done'
+            : type === 'weekly'
+              ? `t.status='done'`
+              : 't.progress=100';
+      const record =
+        type === 'annual'
+          ? "to_jsonb(t)||jsonb_build_object('calculated_progress',annual_progress_value(t.user_id,t.id,t.progress_mode,t.progress))"
+          : 'to_jsonb(t)';
       await client.query(
         `INSERT INTO period_snapshot_items(snapshot_id,user_id,item_type,item_id,title,completed,data)
-        SELECT $1,t.user_id,'${type}',t.id,t.title,${done},jsonb_build_object('record',to_jsonb(t),'ancestors',${ancestors})
+        SELECT $1,t.user_id,'${type}',t.id,t.title,${done},jsonb_build_object('record',${record},'ancestors',${ancestors})
         FROM ${def.table} t ${joins} WHERE t.user_id=$2 AND t.deleted_at IS NULL AND t.archived_at IS NULL AND ${condition}`,
         [id, userId, p.start, p.end],
       );

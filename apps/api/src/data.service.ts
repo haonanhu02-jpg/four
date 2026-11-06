@@ -183,10 +183,12 @@ export class DataService {
           deleted_at: value.deletedAt,
           archived_at: value.archivedAt ?? null,
         };
-        if (type !== 'daily') columns.note = value.note;
+        columns.note = value.note;
         if (type === 'annual')
           Object.assign(columns, {
             year: value.year,
+            progress_mode: value.progressMode ?? 'manual',
+            due_date: value.dueDate ?? null,
             progress: value.progress,
             weight: value.weight,
           });
@@ -217,6 +219,7 @@ export class DataService {
             scheduled_date: value.date,
             original_date: value.originalDate ?? value.date,
             minutes: value.minutes,
+            time_text: value.time ?? '',
             done: value.done,
             completed_at: value.done ? (value.completedAt ?? new Date()) : null,
             rollover_count: value.rolloverCount ?? 0,

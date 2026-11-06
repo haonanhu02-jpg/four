@@ -24,7 +24,9 @@ export const progressOf = (item: WorkItem) =>
       : '未完成'
     : item.type === 'weekly'
       ? ({ todo: '未开始', doing: '进行中', block: '受阻', done: '已完成' }[item.status!] ?? '')
-      : `手动进度 ${item.progress}%`;
+      : item.type === 'annual' && item.progressMode === 'auto'
+        ? `自动进度 ${item.calculatedProgress ?? item.progress}%`
+        : `手动进度 ${item.progress}%`;
 export function sourceOf(value: WorkItem, ancestors: WorkItem[]): WorkItem[] {
   const records = new Map(ancestors.map((v) => [v.id, v]));
   const result: WorkItem[] = [];

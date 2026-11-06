@@ -1,5 +1,6 @@
 import {
   alignmentCodes,
+  effectiveProgress,
   type WorkItem,
   type WorkbenchQuery,
   type Overview,
@@ -18,13 +19,16 @@ const count = (rows: WorkItem[]) => ({
   total: rows.length,
   completed: rows.filter(complete).length,
 });
-const weighted = (rows: WorkItem[]): Metric => {
+const weighted = (rows: WorkItem[], all: WorkItem[] = rows): Metric => {
   const weight = rows.reduce((s, v) => s + (v.weight ?? 0), 0);
   return {
-    ...count(rows),
+    total: rows.length,
+    completed: rows.filter((v) => effectiveProgress(v, all) === 100).length,
     totalWeight: weight,
     value: weight
-      ? Math.round(rows.reduce((s, v) => s + (v.progress ?? 0) * (v.weight ?? 0), 0) / weight)
+      ? Math.round(
+          rows.reduce((s, v) => s + effectiveProgress(v, all) * (v.weight ?? 0), 0) / weight,
+        )
       : null,
   };
 };
@@ -70,7 +74,7 @@ export function localInsights(records: WorkItem[], q: WorkbenchQuery, today: str
   const focus = daily.find((v) => !v.done) ?? null;
   const overview: Overview = {
     asOfDate: today,
-    annual: weighted(annual),
+    annual: weighted(annual, all),
     monthly: weighted(monthly),
     weekly: {
       ...count(weekly),
@@ -121,16 +125,16 @@ export function localInsights(records: WorkItem[], q: WorkbenchQuery, today: str
         add('weekly_without_daily', v);
     }
     if (v.type === 'daily' && !parent) add('daily_without_weekly', v);
-    if (parent && complete(parent) && !complete(v)) add('parent_complete', v);
+    if (parent && effectiveProgress(parent, all) === 100 && !complete(v)) add('parent_complete', v);
     const due =
-      v.type === 'monthly'
+      v.type === 'monthly' || v.type === 'annual'
         ? v.dueDate
         : v.type === 'weekly'
           ? v.endDate
           : v.type === 'daily'
             ? v.date
             : undefined;
-    if (due && due < today && !complete(v)) add('overdue', v);
+    if (due && due < today && effectiveProgress(v, all) < 100) add('overdue', v);
   }
   const counts = Object.fromEntries(
     alignmentCodes.map((code) => [code, issues.filter((v) => v.code === code).length]),

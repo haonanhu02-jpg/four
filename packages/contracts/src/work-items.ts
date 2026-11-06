@@ -15,7 +15,15 @@ const parentId = z.uuid().nullable();
 const progress = z.number().min(0).max(100);
 const weight = z.number().min(0).max(100);
 const annual = z
-  .object({ title: text, note, year: z.number().int().min(1970).max(9999), progress, weight })
+  .object({
+    title: text,
+    note,
+    year: z.number().int().min(1970).max(9999),
+    progress,
+    weight,
+    progressMode: z.enum(['manual', 'auto']).optional(),
+    dueDate: businessDateSchema.nullable().optional(),
+  })
   .strict();
 const monthly = z
   .object({
@@ -42,6 +50,8 @@ const weekly = z
 const daily = z
   .object({
     title: text,
+    note: note.optional(),
+    time: z.string().max(100, '时间最多 100 字').optional(),
     date: businessDateSchema,
     minutes: z.number().int().min(0).max(1440),
     done: z.boolean(),
@@ -94,6 +104,8 @@ export interface WorkItemValues {
   month?: string;
   dueDate?: string | null;
   progress?: number;
+  progressMode?: 'manual' | 'auto';
+  time?: string;
   weight?: number;
   parentId?: string | null;
   startDate?: string;
@@ -105,6 +117,8 @@ export interface WorkItemValues {
   done?: boolean;
 }
 export interface WorkItem extends WorkItemValues {
+  /** Only present in immutable historical snapshots. */
+  calculatedProgress?: number;
   id: string;
   type: WorkItemType;
   title: string;

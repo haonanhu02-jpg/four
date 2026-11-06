@@ -210,12 +210,9 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     await expose();
     for (const value of ['dark', 'light']) {
       await theme(value);
-      for (const view of ['annual', 'monthly']) {
+      for (const view of ['annual', 'monthly', 'weekly']) {
         await evaluate(`board.view=${JSON.stringify(view)};true`);
-        await waitFor(
-          `document.querySelectorAll('.wb-empty').length===${view === 'annual' ? 1 : 3}`,
-          'all empty levels',
-        );
+        await waitFor(`document.querySelectorAll('.wb-empty').length===1`, 'all empty levels');
         await checkContrast(
           view + ' empty states',
           '.wb-empty h3, .wb-empty p, .wb-empty .wb-link, .wb-insight-empty',
@@ -224,6 +221,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       await screenshot('empty-' + value + '.png');
     }
     await theme('dark');
+    await evaluate('board.view="weekly";true');
     await clickText('数据管理');
     const dialogClose = await evaluate(`(() => {
       const element = document.querySelector('[aria-label="关闭数据管理"]');

@@ -34,7 +34,13 @@ export function item(type: WorkItemType, row: Row): WorkItem {
     archivedAt: row.archived_at ? stamp(row.archived_at) : null,
     rolloverCount: Number(row.rollover_count ?? 0),
   };
-  if (type === 'annual') result.year = Number(row.year);
+  if (type === 'annual') {
+    result.year = Number(row.year);
+    result.progressMode = (row.progress_mode ?? 'manual') as 'manual' | 'auto';
+    if (row.calculated_progress !== undefined)
+      result.calculatedProgress = Number(row.calculated_progress);
+    result.dueDate = row.due_date ? date(row.due_date) : null;
+  }
   if (type === 'annual' || type === 'monthly') {
     result.progress = Number(row.progress);
     result.weight = Number(row.weight);
@@ -53,6 +59,7 @@ export function item(type: WorkItemType, row: Row): WorkItem {
     result.status = row.status as WorkItem['status'];
   }
   if (type === 'daily') {
+    result.time = String(row.time_text ?? '');
     result.date = date(row.scheduled_date);
     result.originalDate = date(row.original_date);
     result.minutes = Number(row.minutes);

@@ -14,6 +14,8 @@ export const transferColumns: readonly { key: keyof WorkItem; label: string }[] 
   { key: 'date', label: '执行日期' },
   { key: 'dueDate', label: '截止日期' },
   { key: 'progress', label: '进度' },
+  { key: 'progressMode', label: '进度模式' },
+  { key: 'time', label: '时间记录' },
   { key: 'weight', label: '权重' },
   { key: 'priority', label: '优先级' },
   { key: 'status', label: '状态' },
@@ -181,7 +183,7 @@ export function documentFromTables(
       record.type = level;
       record.id ??= crypto.randomUUID();
       record.title ??= '';
-      if (level !== 'monthly' && record.dueDate === null) delete record.dueDate;
+      if (!['annual', 'monthly'].includes(level) && record.dueDate === null) delete record.dueDate;
       if (level !== 'daily' && record.completedAt === null) delete record.completedAt;
       if (level === 'annual') record.year ??= Number(today.slice(0, 4));
       if (level === 'monthly') record.month ??= today.slice(0, 7);

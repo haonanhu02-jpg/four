@@ -4,7 +4,15 @@ import vue from 'eslint-plugin-vue';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'artifacts/**', '.local/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      'artifacts/**',
+      '.local/**',
+      '个人工作台-折叠版/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/essential'],

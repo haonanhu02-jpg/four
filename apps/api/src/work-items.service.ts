@@ -191,6 +191,8 @@ export class WorkItemsService {
       note: 'note',
       year: 'year',
       progress: 'progress',
+      progressMode: 'progress_mode',
+      time: 'time_text',
       weight: 'weight',
       month: 'current_month',
       dueDate: 'due_date',

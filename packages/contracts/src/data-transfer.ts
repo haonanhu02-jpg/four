@@ -122,11 +122,18 @@ export function normalizeDocument(input: unknown): {
         const common = {
           id: v.id,
           title: v.title ?? '',
-          ...(['annual', 'monthly', 'weekly'].includes(type) ? { note: v.note ?? '' } : {}),
+          note: v.note ?? '',
         };
         mapped =
           type === 'annual'
-            ? { ...common, year: v.year, progress: v.progress ?? 0, weight: v.weight ?? 1 }
+            ? {
+                ...common,
+                year: v.year,
+                progress: v.progress ?? 0,
+                weight: v.weight ?? 1,
+                dueDate: v.due || null,
+                progressMode: v.progressMode ?? 'manual',
+              }
             : type === 'monthly'
               ? {
                   ...common,
@@ -149,6 +156,7 @@ export function normalizeDocument(input: unknown): {
                     ...common,
                     date: v.date,
                     minutes: v.minutes ?? 30,
+                    time: v.time ?? '',
                     done: v.done ?? false,
                     parentId: v.weekId || null,
                   };
@@ -189,6 +197,10 @@ export function normalizeDocument(input: unknown): {
         item.originalMonth ??= item.month;
         item.dueDate ??= null;
       }
+      if (type === 'annual') {
+        item.progressMode ??= 'manual';
+        item.dueDate ??= null;
+      }
       if (type === 'weekly') {
         if (item.startDate! > item.endDate!)
           throw new Error(`周任务 ${item.id} 结束日期早于开始日期`);
@@ -200,6 +212,7 @@ export function normalizeDocument(input: unknown): {
         item.priority ??= 'P1';
       }
       if (type === 'daily') {
+        item.time ??= '';
         item.originalDate ??= item.date;
         item.minutes ??= 30;
         item.done ??= false;

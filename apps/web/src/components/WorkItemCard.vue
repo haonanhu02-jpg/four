@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { WorkItem, WorkItemType, WorkItemValues } from '@workbench/contracts';
+import {
+  effectiveProgress,
+  parseWorkMinutes,
+  type WorkItem,
+  type WorkItemType,
+  type WorkItemValues,
+} from '@workbench/contracts';
 import { useWorkbenchStore } from '../stores/workbench';
 import ParentPicker from './ParentPicker.vue';
 import ChoicePicker from './ChoicePicker.vue';
 import { useInsightsStore } from '../stores/insights';
-const props = defineProps<{ item: WorkItem; index: number }>();
+const props = defineProps<{ item: WorkItem; index: number; compact?: boolean }>();
 const emit = defineEmits<{
   remove: [item: WorkItem];
   add: [type: WorkItemType, parentId?: string];
@@ -31,6 +37,8 @@ const name = computed(
 );
 const entry = computed(() => store.entries[props.item.id]);
 const chain = computed(() => store.lineage(props.item));
+const progress = computed(() => effectiveProgress(props.item, Object.values(store.records)));
+const timeMinutes = computed(() => parseWorkMinutes(props.item.time ?? ''));
 const child = computed<WorkItemType | null>(
   () =>
     ({ annual: 'monthly', monthly: 'weekly', weekly: 'daily', daily: null })[
@@ -46,7 +54,7 @@ const completed = computed(() =>
     ? props.item.done
     : props.item.type === 'weekly'
       ? props.item.status === 'done'
-      : props.item.progress === 100,
+      : progress.value === 100,
 );
 function text(field: keyof WorkItemValues, event: Event) {
   store.edit(props.item, { [field]: (event.target as HTMLInputElement).value } as WorkItemValues);
@@ -69,6 +77,7 @@ function addSibling() {
     class="wb-item"
     :class="[
       `wb-item-${item.type}`,
+      { 'wb-daily-compact': compact },
       { 'is-complete': completed, 'has-conflict': entry?.state === 'conflict' },
     ]"
     :data-item-id="item.id"
@@ -121,12 +130,19 @@ function addSibling() {
 
     <div v-if="item.type === 'annual' || item.type === 'monthly'" class="wb-progress">
       <div>
-        <span>{{ item.type === 'annual' ? '年度手动进度' : '本月手动进度' }}</span
-        ><strong>{{ item.progress }}%</strong>
+        <span>{{
+          item.type === 'annual'
+            ? item.progressMode === 'auto'
+              ? '年度自动进度'
+              : '年度手动进度'
+            : '本月手动进度'
+        }}</span
+        ><strong>{{ progress }}%</strong>
       </div>
-      <div class="wb-progress-track"><span :style="{ width: `${item.progress}%` }" /></div>
+      <div class="wb-progress-track"><span :style="{ width: `${progress}%` }" /></div>
       <input
         type="range"
+        v-if="item.type !== 'annual' || item.progressMode !== 'auto'"
         min="0"
         max="100"
         step="1"
@@ -135,9 +151,23 @@ function addSibling() {
         @input="number('progress', $event)"
         @change="store.save(item.id)"
       />
+      <p v-else class="wb-auto-explanation">
+        按全部有效下属月目标加权汇总，零权重不参与；原手动值 {{ item.progress }}% 已保留。
+      </p>
     </div>
 
     <div class="wb-item-meta">
+      <div v-if="item.type === 'annual'" class="wb-field">
+        进度模式<ChoicePicker
+          :model-value="item.progressMode ?? 'manual'"
+          label="年度进度模式"
+          :options="[
+            { value: 'manual', label: '手动填写' },
+            { value: 'auto', label: '月目标自动汇总' },
+          ]"
+          @update:model-value="(v) => change('progressMode', v)"
+        />
+      </div>
       <label
         v-if="item.type === 'annual' || item.type === 'monthly'"
         class="wb-field wb-small-field"
@@ -168,11 +198,11 @@ function addSibling() {
           aria-label="目标所属月份"
           @change="text('month', $event)"
       /></label>
-      <label v-if="item.type === 'monthly'" class="wb-field"
+      <label v-if="item.type === 'monthly' || item.type === 'annual'" class="wb-field"
         >截止<input
           type="date"
           :value="item.dueDate ?? ''"
-          aria-label="月度目标截止日期"
+          :aria-label="`${name}截止日期`"
           @change="change('dueDate', ($event.target as HTMLInputElement).value || null)"
       /></label>
       <template v-if="item.type === 'weekly'">
@@ -217,6 +247,16 @@ function addSibling() {
         /></label>
       </template>
       <template v-if="item.type === 'daily'">
+        <label class="wb-field wb-time-field"
+          >时间<input
+            type="text"
+            :value="item.time ?? ''"
+            aria-label="每日工作时间"
+            placeholder="09:30–11:00 / 1.5h"
+            maxlength="100"
+            @input="text('time', $event)"
+            @blur="store.save(item.id)"
+        /></label>
         <label class="wb-field wb-small-field"
           >预计<input
             type="number"
@@ -239,6 +279,22 @@ function addSibling() {
       </template>
       <ParentPicker v-if="item.type !== 'annual'" :item="item" />
     </div>
+    <textarea
+      v-if="item.type === 'daily'"
+      class="wb-note-input wb-daily-note"
+      :value="item.note"
+      aria-label="每日工作情况"
+      placeholder="工作情况 / 进展"
+      rows="1"
+      maxlength="10000"
+      @input="text('note', $event)"
+      @blur="store.save(item.id)"
+    />
+    <small
+      v-if="item.type === 'daily' && item.time && timeMinutes !== null"
+      class="wb-recorded-time"
+      >时间记录折合 {{ timeMinutes }} 分钟；预计耗时单独保留。</small
+    >
     <div v-if="item.type !== 'annual'" class="wb-schedule-meta">
       <span
         >原计划

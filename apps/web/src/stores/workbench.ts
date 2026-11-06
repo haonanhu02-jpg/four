@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import {
   API,
@@ -44,7 +44,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       end: addDays(monday(day), 6),
       date: day,
     });
-  const view = ref<'annual' | 'monthly'>('monthly'),
+  const view = ref<'annual' | 'monthly' | 'weekly' | 'charts' | 'tree'>('monthly'),
     userId = ref(''),
     loading = ref(false),
     error = ref(''),
@@ -71,6 +71,9 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     Record<string, { item: WorkItem; values: WorkItemValues; token: string; action: local.Action }>
   >({});
   const isGuest = computed(() => userId.value === local.GUEST);
+  watch(view, (value) => {
+    if (userId.value) void local.metaPut(`view:${userId.value}`, value).catch(() => {});
+  });
   const hasUnpersisted = computed(
     () => Boolean(storageError.value) || persisting.value > 0 || Object.keys(memory).length > 0,
   );
@@ -452,6 +455,10 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       limits[type] = 50;
     }
     try {
+      const savedView = await local.metaGet<string>(`view:${id}`);
+      view.value = ['annual', 'monthly', 'weekly', 'charts', 'tree'].includes(savedView ?? '')
+        ? (savedView as typeof view.value)
+        : 'monthly';
       lastCloud.value = (await local.metaGet<string>(`last-cloud:${id}`)) ?? '';
       await load();
     } catch (caught) {
@@ -521,7 +528,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   function visible(type: WorkItemType) {
     return groups[type].items.map((v) => records[v.id] ?? v);
   }
-  async function add(type: WorkItemType, parentId?: string) {
+  async function add(type: WorkItemType, parentId?: string, overrides: WorkItemValues = {}) {
     creating.value = true;
     try {
       const defaults: Record<WorkItemType, WorkItemValues> = {
@@ -547,14 +554,18 @@ export const useWorkbenchStore = defineStore('workbench', () => {
           parentId: parentId ?? visible('weekly')[0]?.id ?? null,
         },
       };
-      const values = { title: '', ...(type === 'daily' ? {} : { note: '' }), ...defaults[type] },
+      const values = {
+          title: '',
+          ...(type === 'daily' ? { time: '', note: '' } : { note: '' }),
+          ...defaults[type],
+          ...overrides,
+        },
         now = new Date().toISOString();
       const item: WorkItem = {
         id: crypto.randomUUID(),
         type,
         version: 0,
         parentId: null,
-        note: '',
         createdAt: now,
         updatedAt: now,
         deletedAt: null,

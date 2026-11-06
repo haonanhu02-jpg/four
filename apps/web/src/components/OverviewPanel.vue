@@ -20,40 +20,49 @@ const isToday = computed(() => board.selection.date === data.value?.asOfDate);
       <button class="wb-link" @click="insights.refresh">重试概览</button>
     </p>
     <template v-else-if="data">
-      <div class="wb-focus">
-        <div class="wb-donut" :style="{ '--progress': `${data.daily.value ?? 0}%` }">
-          <strong>{{ data.daily.value === null ? '—' : `${data.daily.value}%` }}</strong>
+      <details class="wb-focus-disclosure">
+        <summary>
+          <span>{{ isToday ? '今日焦点' : '当日焦点' }}</span
+          ><strong>{{
+            data.focus?.title || (data.daily.total ? '待办已全部完成' : '先安排一件具体的事')
+          }}</strong
+          ><span>展开来源与详情</span>
+        </summary>
+        <div class="wb-focus">
+          <div class="wb-donut" :style="{ '--progress': `${data.daily.value ?? 0}%` }">
+            <strong>{{ data.daily.value === null ? '—' : `${data.daily.value}%` }}</strong>
+          </div>
+          <div class="wb-focus-text">
+            <p class="wb-eyebrow">
+              {{ isToday ? 'TODAY · 今日焦点' : `${board.selection.date} · 当日焦点` }}
+            </p>
+            <button
+              v-if="data.focus"
+              type="button"
+              class="wb-focus-title"
+              @click="emit('open', data.focus)"
+            >
+              {{ data.focus.title || '未命名待办' }}
+            </button>
+            <h2 v-else>{{ data.daily.total ? '当日待办已全部完成' : '先安排一件具体的事' }}</h2>
+            <p v-if="data.focus" class="wb-focus-chain">
+              <template v-for="parent in chain" :key="parent.id"
+                ><span
+                  >{{ itemNames[parent.type] }}：{{ parent.title || '未命名目标' }}</span
+                ></template
+              ><span v-if="!chain.length">尚未关联周任务，可点击焦点补充关联</span>
+            </p>
+            <p v-else>
+              {{
+                data.daily.total
+                  ? '可以回顾成果，或继续安排下一步。'
+                  : '在下方新增待办，把目标落实到行动。'
+              }}
+            </p>
+            <small>当日计划 {{ data.daily.minutes }} 分钟 · {{ data.daily.total }} 件</small>
+          </div>
         </div>
-        <div class="wb-focus-text">
-          <p class="wb-eyebrow">
-            {{ isToday ? 'TODAY · 今日焦点' : `${board.selection.date} · 当日焦点` }}
-          </p>
-          <button
-            v-if="data.focus"
-            type="button"
-            class="wb-focus-title"
-            @click="emit('open', data.focus)"
-          >
-            {{ data.focus.title || '未命名待办' }}
-          </button>
-          <h2 v-else>{{ data.daily.total ? '当日待办已全部完成' : '先安排一件具体的事' }}</h2>
-          <p v-if="data.focus" class="wb-focus-chain">
-            <template v-for="parent in chain" :key="parent.id"
-              ><span
-                >{{ itemNames[parent.type] }}：{{ parent.title || '未命名目标' }}</span
-              ></template
-            ><span v-if="!chain.length">尚未关联周任务，可点击焦点补充关联</span>
-          </p>
-          <p v-else>
-            {{
-              data.daily.total
-                ? '可以回顾成果，或继续安排下一步。'
-                : '在下方新增待办，把目标落实到行动。'
-            }}
-          </p>
-          <small>当日计划 {{ data.daily.minutes }} 分钟 · {{ data.daily.total }} 件</small>
-        </div>
-      </div>
+      </details>
       <div class="wb-stat-grid">
         <div class="wb-stat" data-metric="annual">
           <strong>{{ data.annual.value === null ? '—' : `${data.annual.value}%` }}</strong
@@ -63,7 +72,7 @@ const isToday = computed(() => board.selection.date === data.value?.asOfDate);
               ? '暂无目标'
               : data.annual.totalWeight === 0
                 ? '未设置权重'
-                : '按手动进度加权'
+                : '按各目标当前模式加权'
           }}</small>
         </div>
         <div class="wb-stat" data-metric="monthly">
@@ -102,9 +111,11 @@ const isToday = computed(() => board.selection.date === data.value?.asOfDate);
           }}</span>
         </summary>
         <p>
-          年度、月度 = Σ（手动进度 × 权重）÷ Σ权重；0 权重不参与，权重全为 0
+          年度、月度 = Σ（进度 × 权重）÷
+          Σ权重。年度目标可选择手动填写或由全部有效下属月目标加权自动汇总；自动模式没有有效权重时进度为
+          0%，原手动值保留。0 权重不参与，概览权重全为 0
           时显示“未设置权重”。周推进指数取状态分数平均：未开始 0、进行中 50、受阻 15、已完成
-          100；它不代表实际工作量完成率。日完成率按已完成件数计算。百分比四舍五入，上层手动进度保持独立。
+          100；它不代表实际工作量完成率。日完成率按已完成件数计算。百分比四舍五入；月度进度保持手动填写，不由日待办反推。
         </p>
       </details>
     </template>

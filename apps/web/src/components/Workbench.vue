@@ -19,7 +19,12 @@ import HistoryPanel from './HistoryPanel.vue';
 import CarryoverPanel from './CarryoverPanel.vue';
 import DataPanel from './DataPanel.vue';
 import AdminPanel from './AdminPanel.vue';
+import GoalTable from './GoalTable.vue';
+import WeeklyExecution from './WeeklyExecution.vue';
+import ChartsPanel from './ChartsPanel.vue';
+import PlanTree from './PlanTree.vue';
 import '../workbench.css';
+import '../five-views.css';
 defineProps<{ loggingOut: boolean; logoutError: string }>();
 const emit = defineEmits<{ logout: [] }>();
 const account = useAccountStore();
@@ -89,7 +94,10 @@ let detailsSequence = 0;
 let mounted = true;
 watch(
   () => JSON.stringify(store.selection),
-  () => insights.schedule(true),
+  () => {
+    syncSelection();
+    insights.schedule(true);
+  },
 );
 watch(
   () => store.revision,
@@ -214,17 +222,24 @@ async function today() {
     end: addDays(from, 6),
   });
 }
-async function add(type: WorkItemType, parentId?: string) {
+async function add(type: WorkItemType, parentId?: string, date?: string) {
   if (!(await store.persistAll())) {
     store.error = '请先处理未保存的内容';
     return;
   }
-  if (type !== 'annual') store.view = 'monthly';
-  const created = await store.add(type, parentId);
+  store.view = type === 'annual' ? 'annual' : type === 'monthly' ? 'monthly' : 'weekly';
+  const created = await store.add(type, parentId, date ? { date } : {});
   if (created) {
     detailDialog.value?.close();
     await nextTick();
-    const input = document.querySelector<HTMLInputElement>(`[data-title-id="${created.id}"]`);
+    // A new day can sit inside an explicitly collapsed parent. Open the task
+    // details if its inline field is currently hidden, so the creation is visible.
+    let input = document.querySelector<HTMLInputElement>(`[data-title-id="${created.id}"]`);
+    if (!input) {
+      await openItem(created);
+      await nextTick();
+      input = document.querySelector<HTMLInputElement>(`[data-title-id="${created.id}"]`);
+    }
     input?.focus();
     input?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
@@ -296,8 +311,8 @@ onUnmounted(() => {
     <div class="wb-toolbar">
       <div>
         <p class="wb-eyebrow">年 → 月 → 周 → 日</p>
-        <h1>把目标，落实到今天。</h1>
-        <p class="wb-subtitle">从年度方向到每日行动，每件事都有清晰的来处。</p>
+        <h1>个人工作台</h1>
+        <p class="wb-subtitle">从年度方向到每日行动，层层对齐。</p>
       </div>
       <div class="wb-actions">
         <span class="wb-cloud" :class="{ pending: store.hasUnsaved }" role="status"
@@ -410,6 +425,7 @@ onUnmounted(() => {
         type="button"
         :class="{ active: store.view === 'annual' }"
         :aria-pressed="store.view === 'annual'"
+        data-view="annual"
         @click="store.view = 'annual'"
       >
         年度目标 <span>{{ store.groups.annual.total }}</span></button
@@ -417,12 +433,39 @@ onUnmounted(() => {
         type="button"
         :class="{ active: store.view === 'monthly' }"
         :aria-pressed="store.view === 'monthly'"
+        data-view="monthly"
         @click="store.view = 'monthly'"
       >
         月度执行 <span>{{ store.groups.monthly.total }}</span></button
+      ><button
+        type="button"
+        data-view="weekly"
+        :class="{ active: store.view === 'weekly' }"
+        :aria-pressed="store.view === 'weekly'"
+        @click="store.view = 'weekly'"
+      >
+        周任务 <span>{{ store.groups.weekly.total }}</span></button
+      ><button
+        type="button"
+        data-view="charts"
+        :class="{ active: store.view === 'charts' }"
+        :aria-pressed="store.view === 'charts'"
+        @click="store.view = 'charts'"
+      >
+        图表看板</button
+      ><button
+        type="button"
+        data-view="tree"
+        :class="{ active: store.view === 'tree' }"
+        :aria-pressed="store.view === 'tree'"
+        @click="store.view = 'tree'"
+      >
+        清单</button
       ><small
         >{{ store.selection.year }} 年{{
-          store.view === 'monthly' ? ` · ${store.selection.month.slice(5)}月` : ''
+          ['monthly', 'weekly', 'charts'].includes(store.view)
+            ? ` · ${store.selection.month.slice(5)}月`
+            : ''
         }}</small
       >
     </nav>
@@ -437,7 +480,7 @@ onUnmounted(() => {
           :disabled="store.loading"
           @change="changeYear"
       /></label>
-      <template v-if="store.view === 'monthly'">
+      <template v-if="['monthly', 'weekly', 'charts'].includes(store.view)">
         <label
           >月份<input
             v-model="month"
@@ -446,7 +489,7 @@ onUnmounted(() => {
             :disabled="store.loading"
             @change="changeMonth()"
         /></label>
-        <form class="wb-range-form" @submit.prevent="applyRange">
+        <form v-if="store.view !== 'charts'" class="wb-range-form" @submit.prevent="applyRange">
           <span>周 / 自定义区间</span>
           <div>
             <button type="button" class="wb-icon-button" aria-label="上一个区间" @click="shift(-1)">
@@ -462,7 +505,7 @@ onUnmounted(() => {
             ><button type="submit" class="wb-button">应用</button>
           </div>
         </form>
-        <label
+        <label v-if="store.view !== 'charts'"
           >日期<input
             v-model="date"
             type="date"
@@ -472,7 +515,7 @@ onUnmounted(() => {
         /></label>
       </template>
       <button type="button" class="wb-today" @click="today">回到今天</button>
-      <small v-if="store.view === 'monthly'" class="wb-range-meta"
+      <small v-if="['monthly', 'weekly'].includes(store.view)" class="wb-range-meta"
         >{{ dayLabel(store.selection.start) }} — {{ dayLabel(store.selection.end) }} ·
         {{ daySpan(store.selection.start, store.selection.end) }}
         天<br />显示与区间有交集的周任务</small
@@ -480,12 +523,17 @@ onUnmounted(() => {
     </section>
     <p v-if="store.loading" class="wb-loading" role="status">正在读取工作台…</p>
 
-    <OverviewPanel v-if="!store.loading" @open="openItem" />
+    <OverviewPanel
+      v-if="!store.loading && ['annual', 'monthly', 'weekly'].includes(store.view)"
+      @open="openItem"
+    />
 
     <template
       v-for="type in (store.view === 'annual'
         ? ['annual']
-        : ['monthly', 'weekly', 'daily']) as WorkItemType[]"
+        : store.view === 'monthly'
+          ? ['monthly']
+          : []) as WorkItemType[]"
       :key="type"
     >
       <section class="wb-section" :aria-label="names[type]">
@@ -534,34 +582,30 @@ onUnmounted(() => {
             + 创建第一条{{ names[type] }}
           </button>
         </div>
-        <div
-          v-else-if="!store.loading"
-          class="wb-item-grid"
-          :class="{ 'wb-two-columns': type === 'monthly' }"
-        >
-          <WorkItemCard
-            v-for="(value, index) in store.visible(type)"
-            :key="value.id"
-            :item="value"
-            :index="index"
-            @remove="remove"
-            @add="add"
-            @history="openHistory"
-          />
-        </div>
-        <button
-          v-if="store.groups[type].items.length < store.groups[type].total"
-          class="wb-load-more"
-          type="button"
-          @click="store.more(type)"
-          :disabled="store.moreBusy !== null"
-        >
-          加载更多（已显示 {{ store.groups[type].items.length }} / {{ store.groups[type].total }}）
-        </button>
+        <GoalTable
+          v-else-if="!store.loading && (type === 'annual' || type === 'monthly')"
+          :type="type"
+          @open="openItem"
+          @remove="remove"
+          @add="add"
+        />
       </section>
     </template>
+    <WeeklyExecution
+      v-if="store.view === 'weekly' && !store.loading"
+      @open="openItem"
+      @remove="remove"
+      @history="openHistory"
+      @add="add"
+    />
+    <ChartsPanel v-if="store.view === 'charts' && !store.loading" @open="openItem" />
+    <PlanTree v-if="store.view === 'tree' && !store.loading" @open="openItem" />
     <AnnualExecution v-if="store.view === 'annual' && !store.loading" @open="openItem" />
-    <AlignmentPanel v-if="!store.loading" @open="openItem" @add="add" />
+    <AlignmentPanel
+      v-if="!store.loading && ['annual', 'monthly', 'weekly'].includes(store.view)"
+      @open="openItem"
+      @add="add"
+    />
     <p class="wb-bottom-note">
       点击文字直接编辑 · 停止输入后自动保存 · 标题处按 Enter 连续新增 · 删除后可在回收站恢复
     </p>
