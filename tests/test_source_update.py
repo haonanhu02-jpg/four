@@ -50,6 +50,7 @@ elif name=='docker':
   if any('docker.1ms.run/' in x for x in a):sys.exit(1)
  elif 'build' in a:
   if os.environ.get('BUILD_FAIL'):sys.exit(1)
+  if os.environ.get('CONSUME_BUILD'):sys.stdin.read()
  elif 'exec' in a and any('pg_dump' in x for x in a):
   if os.environ.get('BACKUP_FAIL'):sys.exit(1)
   print('mock-dump')
@@ -124,6 +125,13 @@ exit "$code"
         self.env['DB_MAJOR']='19';r=self.run_script()
         self.assertNotEqual(r.returncode,0)
         self.assertFalse(any('up' in c or 'run' in c for c in self.calls()))
+
+    def test_build_reading_stdin_cannot_skip_remaining_deployment(self):
+        self.env['CONSUME_BUILD']='1'
+        r=self.run_script()
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertIn('部署完成',r.stdout)
+        self.assertEqual(sum('run' in c for c in self.calls()),2)
 
     def test_help_without_dependencies(self):
         r=subprocess.run(['bash',str(ROOT/'update-four.sh'),'--help'],capture_output=True,text=True)

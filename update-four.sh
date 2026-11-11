@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Standalone entry: a child Bash protects the caller when this file is sourced.
 (
-bash -s -- "$@" <<'FOUR_DEPLOY_SCRIPT'
+wb_update_script="$(cat <<'FOUR_DEPLOY_SCRIPT'
 set -Eeuo pipefail
 umask 077
 APP_DIR="${FOUR_APP_DIR:-$HOME/four-workbench}"
@@ -139,4 +139,7 @@ dc ps
 printf '\n部署完成，源码版本：%s\n目录：%s\n管理员初始凭据（仅首次创建）：%s\n' "$SOURCE_REVISION" "$APP_DIR" "$APP_DIR/.local/source-admin/admin.txt"
 printf '%s\n' '以后重复运行本脚本即可更新。外网访问地址以 .env 的 COMPOSE_APP_ORIGIN 为准。'
 FOUR_DEPLOY_SCRIPT
+)"
+# Keep program text separate from stdin: Docker/BuildKit may consume stdin.
+bash -c "$wb_update_script" four-source-update "$@" </dev/null
 )
