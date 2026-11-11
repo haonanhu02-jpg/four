@@ -12,13 +12,13 @@ source ./update-four.sh
 
 也支持 `bash ./update-four.sh`。默认目录为 `~/four-workbench`，每次重复执行同一命令即可更新。默认项目名 `four-layer-workbench`，现有数据库卷、账号、`.env` 和密钥保留。不要变更 Compose 项目名或删除数据卷。
 
-首次运行自动选择服务器网卡 IP，监听 `0.0.0.0:8080`。如果服务器在 NAT 后面，建议首次运行明确指定实际访问地址：
+默认网站地址为 `http://192.168.3.110:5001`，监听 `0.0.0.0:5001`。首次部署及已有部署都会配置端口 5001；数据库密码、令牌密钥及账号数据保留。更换服务器时可指定访问地址：
 
 ```bash
-FOUR_ORIGIN=http://服务器公网IP:8080 source ./update-four.sh
+FOUR_ORIGIN=http://服务器公网IP:5001 source ./update-four.sh
 ```
 
-已有 `.env` 时不会覆盖，之后修改访问地址应编辑部署目录 `.env` 的 `COMPOSE_APP_ORIGIN`。HTTPS 域名由自己的反向代理提供，同时设置 `COOKIE_SECURE=true`。需要开放服务器防火墙/安全组的相应端口。
+已有 `.env` 会先备份到 `.local/source-config-backups/`，仅更新网站端口、访问来源、监听地址及对应 Cookie 配置，其他内容保留。重复执行且配置一致时不会重复修改。可用 `FOUR_PORT` 自定义端口、`FOUR_ORIGIN` 自定义浏览器访问地址；HTTPS 域名由自己的反向代理提供。需要开放服务器防火墙/安全组的 5001 端口。
 
 可选参数：`--dir /指定目录`、`--branch main`、`--project 自定义名称`。本地已有修改、分支分叉、目标目录属于其他项目时会停止，不会强制重置或删除内容。请不要把它指向原有 Release 部署目录 `~/four-workbench-deployment`；两种部署方式分别维护。已有部署可将 `--dir` 指向原本的本仓库 Git 检出目录，并保留项目名和原配置。
 

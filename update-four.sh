@@ -15,7 +15,7 @@ while (($#)); do
     --dir) APP_DIR="${2:?--dir 需要目录}"; shift 2;;
     --branch) BRANCH="${2:?--branch 需要分支}"; shift 2;;
     --project) PROJECT="${2:?--project 需要名称}"; shift 2;;
-    --help|-h) printf '%s\n' '用法：source ./update-four.sh [--dir 目录] [--branch main] [--project 名称]' '默认目录：~/four-workbench；重复运行更新源码并重新部署。' '首次部署可用 FOUR_ORIGIN=http://服务器IP:8080 指定访问地址。' '需要 Bash、Git、Python 3.10+、Docker Compose 2.20+、flock、timeout。'; exit 0;;
+    --help|-h) printf '%s\n' '用法：source ./update-four.sh [--dir 目录] [--branch main] [--project 名称]' '默认目录：~/four-workbench；重复运行更新源码并重新部署。' '默认网站端口 5001，地址 http://192.168.3.110:5001；可用 FOUR_ORIGIN/FOUR_PORT 覆盖。' '需要 Bash、Git、Python 3.10+、Docker Compose 2.20+、flock、timeout。'; exit 0;;
     *) printf '未知参数：%s\n' "$1" >&2; exit 1;;
   esac
 done
@@ -64,24 +64,46 @@ cd -- "$APP_DIR"
 STAGE='初始化配置'
 python3 - <<'PY_CONFIG'
 from pathlib import Path
-import os,secrets,socket
+import os,secrets,re,time,tempfile
 from urllib.parse import urlsplit
 p=Path('.env')
+port=int(os.environ.get('FOUR_PORT','5001'))
+assert 1 <= port <= 65535, 'FOUR_PORT 必须在 1 到 65535 之间'
+origin=os.environ.get('FOUR_ORIGIN',f'http://192.168.3.110:{port}').rstrip('/')
+url=urlsplit(origin)
+assert url.scheme in ('http','https') and url.hostname and url.path in ('','/') and not url.query and not url.fragment and not url.username and not url.password and not any(c.isspace() for c in origin), 'FOUR_ORIGIN 必须是 http(s)://主机[:端口]'
+updates={'COMPOSE_APP_ORIGIN':origin,'WEB_PORT':str(port),'WEB_BIND_ADDRESS':'0.0.0.0','COOKIE_SECURE':str(url.scheme=='https').lower()}
 if p.exists():
-    print('保留已有 .env（访问地址和端口也沿用原配置）。')
+    old=p.read_text(encoding='utf-8')
+    content=old
+    for key,value in updates.items():
+        pattern=rf'^(?:export[ \t]+)?{key}[ \t]*=.*$'
+        if re.search(pattern,content,re.M):
+            content=re.sub(pattern,lambda m:f'{key}={value}',content,flags=re.M)
+        else:
+            content=content.rstrip('\n')+f'\n{key}={value}\n'
+    if content!=old:
+        backups=Path('.local/source-config-backups');backups.mkdir(parents=True,exist_ok=True)
+        backup=backups/f'env-{time.time_ns()}.bak'
+        with backup.open('x',encoding='utf-8') as stream:stream.write(old)
+        backup.chmod(0o600)
+        with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=p.parent,delete=False) as stream:
+            stream.write(content);temporary=Path(stream.name)
+        temporary.chmod(0o600);temporary.replace(p)
+        print(f'原配置已备份至 {backup}，保留数据库密码和账号配置，更新网站地址：{origin}')
+    else:print(f'配置已是目标端口，无需修改：{origin}')
 else:
-    try:
-        with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as s:
-            s.connect(('198.18.0.1',80)); ip=s.getsockname()[0]
-    except OSError: ip='127.0.0.1'
-    origin=os.environ.get('FOUR_ORIGIN',f'http://{ip}:8080').rstrip('/')
-    url=urlsplit(origin)
-    assert url.scheme in ('http','https') and url.hostname and url.path in ('','/') and not url.query and not url.fragment and not url.username, 'FOUR_ORIGIN 必须是 http(s)://主机[:端口]'
     password=secrets.token_hex(24)
-    p.write_text(f'POSTGRES_USER=workbench\nPOSTGRES_DB=workbench\nPOSTGRES_PASSWORD={password}\nAUTH_TOKEN_SECRET={secrets.token_hex(32)}\nCOMPOSE_APP_ORIGIN={origin}\nWEB_PORT=8080\nWEB_BIND_ADDRESS=0.0.0.0\nCOOKIE_SECURE={str(url.scheme=="https").lower()}\n',encoding='utf-8')
+    p.write_text(f'POSTGRES_USER=workbench\nPOSTGRES_DB=workbench\nPOSTGRES_PASSWORD={password}\nAUTH_TOKEN_SECRET={secrets.token_hex(32)}\n'+''.join(f'{k}={v}\n' for k,v in updates.items()),encoding='utf-8')
     p.chmod(0o600)
-    print(f'已生成随机密钥，访问地址：{origin}。如为内网地址，请在 .env 修改 COMPOSE_APP_ORIGIN。')
+    print(f'已生成随机密钥，访问地址：{origin}')
+
 PY_CONFIG
+# Explicit deployment settings also override stale variables in the caller's env.
+export WEB_PORT="${FOUR_PORT:-5001}"
+export COMPOSE_APP_ORIGIN="${FOUR_ORIGIN:-http://192.168.3.110:$WEB_PORT}"
+export WEB_BIND_ADDRESS=0.0.0.0
+if [[ "$COMPOSE_APP_ORIGIN" == https://* ]]; then export COOKIE_SECURE=true; else export COOKIE_SECURE=false; fi
 export SOURCE_REVISION="$(g rev-parse HEAD)"
 export IMAGE_TAG="source-${SOURCE_REVISION:0:12}"
 dc() {
@@ -137,7 +159,8 @@ STAGE='启动与健康检查'
 dc up -d --no-build --pull never --wait --wait-timeout 180 api web
 dc ps
 printf '\n部署完成，源码版本：%s\n目录：%s\n管理员初始凭据（仅首次创建）：%s\n' "$SOURCE_REVISION" "$APP_DIR" "$APP_DIR/.local/source-admin/admin.txt"
-printf '%s\n' '以后重复运行本脚本即可更新。外网访问地址以 .env 的 COMPOSE_APP_ORIGIN 为准。'
+python3 -c 'from pathlib import Path; print(next(line.split("=",1)[1] for line in Path(".env").read_text().splitlines() if line.startswith("COMPOSE_APP_ORIGIN=")))'
+printf '%s\n' '以上为网站地址；以后重复运行本脚本即可更新。'
 FOUR_DEPLOY_SCRIPT
 )"
 # Keep program text separate from stdin: Docker/BuildKit may consume stdin.

@@ -22,6 +22,8 @@ class UpdateTests(unittest.TestCase):
         self.env = {**os.environ, 'HOME':str(self.root/'home'), 'PATH':str(self.bin)+':'+os.environ['PATH'], 'CALL_LOG':str(self.log)}
         self.env.pop('FOUR_APP_DIR', None)
         self.env.pop('BASH_ENV', None)
+        self.env.pop('FOUR_PORT', None)
+        self.env.pop('FOUR_ORIGIN', None)
         program = '''#!/usr/bin/env python3
 import os,sys,json
 from pathlib import Path
@@ -45,6 +47,9 @@ if name=='git':
   print('a'*40)
  elif 'branch' in a:print('main')
 elif name=='docker':
+ if os.environ.get('CHECK_PORT') and any(v in a for v in ['build','up','run']):
+  assert os.environ['WEB_PORT']=='5001', 'stale port override'
+  assert os.environ['COMPOSE_APP_ORIGIN']=='http://192.168.3.110:5001', 'stale origin override'
  if a==['compose','version','--short']:print('2.30.0')
  elif 'pull' in a:
   if any('docker.1ms.run/' in x for x in a):sys.exit(1)
@@ -83,6 +88,8 @@ exit "$code"
     def test_success_and_rerun_preserve_config(self):
         r=self.run_script();self.assertEqual(r.returncode,0,r.stderr)
         config=(self.app/'.env').read_bytes()
+        self.assertIn(b'WEB_PORT=5001',config)
+        self.assertIn(b'COMPOSE_APP_ORIGIN=http://192.168.3.110:5001',config)
         r=self.run_script();self.assertEqual(r.returncode,0,r.stderr)
         self.assertEqual(config,(self.app/'.env').read_bytes())
         calls=self.calls()
@@ -99,6 +106,28 @@ exit "$code"
         self.assertNotEqual(r.returncode,0)
         self.assertFalse(any('build' in c or 'up' in c for c in self.calls()))
         self.assertIn('RETURNED:1',r.stdout)
+
+    def test_stale_shell_environment_cannot_reenable_port_8080(self):
+        self.env.update({'WEB_PORT':'8080','COMPOSE_APP_ORIGIN':'http://old:8080','CHECK_PORT':'1'})
+        r=self.run_script();self.assertEqual(r.returncode,0,r.stderr)
+
+    def test_existing_8080_config_migrates_without_changing_secrets(self):
+        self.app.mkdir(parents=True)
+        original='POSTGRES_PASSWORD=keep-this\nAUTH_TOKEN_SECRET=keep-too\nPOSTGRES_DB=existing\nWEB_PORT=8080\nCOMPOSE_APP_ORIGIN=http://192.168.3.110:8080\nCOOKIE_SECURE=true\n'
+        (self.app/'.env').write_text(original)
+        (self.app/'.git').mkdir()
+        (self.app/'Dockerfile').write_text('ARG NODE_IMAGE=node:24@sha256:abc\nARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1@sha256:def\n')
+        (self.app/'compose.yaml').write_text('services: {}\n');(self.app/'package.json').write_text('{}')
+        r=self.run_script();self.assertEqual(r.returncode,0,r.stderr)
+        updated=(self.app/'.env').read_text()
+        for entry in ['POSTGRES_PASSWORD=keep-this','AUTH_TOKEN_SECRET=keep-too','POSTGRES_DB=existing','WEB_PORT=5001','COMPOSE_APP_ORIGIN=http://192.168.3.110:5001','COOKIE_SECURE=false']:
+            self.assertIn(entry,updated)
+        backups=list((self.app/'.local/source-config-backups').glob('*.bak'))
+        self.assertEqual(len(backups),1)
+        self.assertEqual(backups[0].read_text(),original)
+        r=self.run_script();self.assertEqual(r.returncode,0,r.stderr)
+        self.assertEqual((self.app/'.env').read_text(),updated)
+        self.assertEqual(len(list((self.app/'.local/source-config-backups').glob('*.bak'))),1)
 
     def test_build_failure_does_not_run_database_or_migration(self):
         self.env['BUILD_FAIL']='1';r=self.run_script()
