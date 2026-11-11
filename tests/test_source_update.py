@@ -51,6 +51,9 @@ elif name=='docker':
   assert os.environ['WEB_PORT']=='5001', 'stale port override'
   assert os.environ['COMPOSE_APP_ORIGIN']=='http://192.168.3.110:5001', 'stale origin override'
  if a==['compose','version','--short']:print('2.30.0')
+ elif 'config' in a:
+  assert 'POSTGRES_PASSWORD' not in os.environ
+  print(json.dumps({'services':{'db':{'environment':{'POSTGRES_USER':'workbench','POSTGRES_DB':'workbench','POSTGRES_PASSWORD':'mock-password'}}}}))
  elif 'pull' in a:
   if any('docker.1ms.run/' in x for x in a):sys.exit(1)
  elif 'build' in a:
@@ -60,7 +63,18 @@ elif name=='docker':
   if os.environ.get('BACKUP_FAIL'):sys.exit(1)
   print('mock-dump')
  elif 'pg_restore' in a:sys.stdin.read()
- elif 'run' in a:sys.stdin.read()
+ elif 'run' in a:
+  if 'scripts/database-connection.mjs' in a:
+   marker=Path(os.environ['CALL_LOG']+'.repaired')
+   if 'check' in a:
+    if os.environ.get('AUTH_ERROR'):sys.exit(1)
+    if os.environ.get('AUTH_FAIL') and not marker.exists():sys.exit(28)
+   elif 'repair-sql' in a:print('ALTER ROLE mock;')
+  sys.stdin.read()
+ elif 'exec' in a and any('ON_ERROR_STOP' in x for x in a):
+  assert 'pg_dump' in Path(os.environ['CALL_LOG']).read_text()
+  assert sys.stdin.read().strip()=='ALTER ROLE mock;'
+  Path(os.environ['CALL_LOG']+'.repaired').touch()
  elif 'ps' in a and os.environ.get('DB_MAJOR'):print('existing-db')
  elif 'inspect' in a:print('true')
  elif 'exec' in a and any('server_version_num' in x for x in a):print(os.environ['DB_MAJOR']+'0000')
@@ -99,7 +113,7 @@ exit "$code"
         self.assertFalse(any('down' in c for c in calls))
         self.assertIn('RETURNED:0',r.stdout)
         self.assertIn('部署完成',r.stdout)
-        self.assertEqual(sum('run' in c for c in calls),4)
+        self.assertEqual(sum('run' in c for c in calls),6)
 
     def test_fetch_failure_never_changes_containers(self):
         self.env['FETCH_FAIL']='1';r=self.run_script()
@@ -110,6 +124,20 @@ exit "$code"
     def test_stale_shell_environment_cannot_reenable_port_8080(self):
         self.env.update({'WEB_PORT':'8080','COMPOSE_APP_ORIGIN':'http://old:8080','CHECK_PORT':'1'})
         r=self.run_script();self.assertEqual(r.returncode,0,r.stderr)
+
+    def test_auth_failure_is_repaired_only_after_backup(self):
+        self.env.update({'AUTH_FAIL':'1','POSTGRES_PASSWORD':'stale-shell-secret'})
+        r=self.run_script();self.assertEqual(r.returncode,0,r.stderr)
+        self.assertIn('部署完成',r.stdout)
+        calls=self.calls()
+        self.assertEqual(sum('repair-sql' in c for c in calls),1)
+        self.assertEqual(sum('check' in c for c in calls),2)
+        self.assertNotIn('stale-shell-secret',r.stdout+r.stderr+self.log.read_text())
+
+    def test_network_failure_is_not_treated_as_wrong_password(self):
+        self.env['AUTH_ERROR']='1';r=self.run_script()
+        self.assertNotEqual(r.returncode,0)
+        self.assertFalse(any('repair-sql' in c or 'migrate' in c for c in self.calls() if 'run' in c))
 
     def test_existing_8080_config_migrates_without_changing_secrets(self):
         self.app.mkdir(parents=True)
@@ -160,7 +188,7 @@ exit "$code"
         r=self.run_script()
         self.assertEqual(r.returncode,0,r.stderr)
         self.assertIn('部署完成',r.stdout)
-        self.assertEqual(sum('run' in c for c in self.calls()),2)
+        self.assertEqual(sum('run' in c for c in self.calls()),3)
 
     def test_help_without_dependencies(self):
         r=subprocess.run(['bash',str(ROOT/'update-four.sh'),'--help'],capture_output=True,text=True)

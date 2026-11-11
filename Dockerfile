@@ -38,6 +38,7 @@ COPY --from=build --chown=node:node /app/packages/contracts/dist ./packages/cont
 COPY --chown=node:node database/migrations ./database/migrations
 COPY --chown=node:node scripts/migrate.mjs ./scripts/migrate.mjs
 COPY --chown=node:node scripts/bootstrap-admin.mjs ./scripts/bootstrap-admin.mjs
+COPY --chown=node:node scripts/database-connection.mjs ./scripts/database-connection.mjs
 USER node
 EXPOSE 3000
 CMD ["node", "apps/api/dist/main.js"]

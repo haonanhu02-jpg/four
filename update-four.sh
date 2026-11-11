@@ -107,9 +107,13 @@ if [[ "$COMPOSE_APP_ORIGIN" == https://* ]]; then export COOKIE_SECURE=true; els
 export SOURCE_REVISION="$(g rev-parse HEAD)"
 export IMAGE_TAG="source-${SOURCE_REVISION:0:12}"
 dc() {
-  if [[ -n "$PROJECT" ]]; then docker compose --project-name "$PROJECT" --env-file "$APP_DIR/.env" -f "$APP_DIR/compose.yaml" "$@";
-  else docker compose --env-file "$APP_DIR/.env" -f "$APP_DIR/compose.yaml" "$@"; fi
+  # Connection secrets must come from this deployment's file, not the login shell.
+  if [[ -n "$PROJECT" ]]; then env -u POSTGRES_USER -u POSTGRES_DB -u POSTGRES_PASSWORD -u AUTH_TOKEN_SECRET -u DATABASE_URL docker compose --project-name "$PROJECT" --env-file "$APP_DIR/.env" -f "$APP_DIR/compose.yaml" "$@";
+  else env -u POSTGRES_USER -u POSTGRES_DB -u POSTGRES_PASSWORD -u AUTH_TOKEN_SECRET -u DATABASE_URL docker compose --env-file "$APP_DIR/.env" -f "$APP_DIR/compose.yaml" "$@"; fi
 }
+unset COMPOSE_DATABASE_URL
+# Build a properly escaped URL; JSON and the result remain in pipes/variables.
+export COMPOSE_DATABASE_URL="$(dc config --format json | python3 -c 'import json,sys; from urllib.parse import quote; e=json.load(sys.stdin)["services"]["db"]["environment"]; print("postgresql://"+quote(e["POSTGRES_USER"],safe="")+":"+quote(e["POSTGRES_PASSWORD"],safe="")+"@db:5432/"+quote(e["POSTGRES_DB"],safe=""))')"
 STAGE='拉取基础镜像'
 # Mirrors retain the upstream immutable digest; failures fall back to upstream.
 pull_base() {
@@ -151,6 +155,18 @@ mv -- "$BACKUP.partial" "$BACKUP"
 sha256sum "$BACKUP" >"$BACKUP.sha256"
 printf '已备份数据库：%s\n' "$BACKUP"
 dc up -d --wait --wait-timeout 180 db
+STAGE='校验应用数据库凭据'
+if dc run -T --rm --no-deps api node scripts/database-connection.mjs check </dev/null; then
+  printf '%s\n' '应用与数据库凭据一致。'
+else
+  AUTH_CODE=$?
+  if [[ "$AUTH_CODE" != 28 ]]; then exit "$AUTH_CODE"; fi
+  STAGE='同步已有数据库卷的连接密码'
+  printf '%s\n' '已确认密码不一致；数据库已备份，现在将本项目数据库角色同步为 .env 中的密码。网页登录账号密码保持不变。'
+  dc run -T --rm --no-deps api node scripts/database-connection.mjs repair-sql </dev/null |
+    dc exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+  dc run -T --rm --no-deps api node scripts/database-connection.mjs check </dev/null
+fi
 STAGE='迁移数据库'
 dc run -T --rm --no-deps migrate </dev/null
 STAGE='初始化管理员'
