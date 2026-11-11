@@ -14,6 +14,8 @@ Vue 3 + TypeScript + Vite 前端、NestJS 后端、PostgreSQL 数据库的工作
 
 ## 下载镜像与生产部署
 
+需要像 `git pull` 一样更新最新 `main` 并在 Linux 服务器构建部署时，使用独立脚本 `source ./update-four.sh`，无需填写目录参数。详见 [Linux 源码一键部署](docs/Linux源码一键部署.md)。
+
 推荐使用[一键部署脚本](deploy/auto-deploy.py)：自动经国内可用加速通道获取最新正式 Release 的源码及三个预构建镜像，校验后完成启动、迁移、管理员初始化与健康检查。以后运行同一命令即可更新，保留数据库和配置；已有实例变更前自动备份。宿主机需要 Python 3.10+、curl、Docker 与 Compose 2.20+，不需要 Node.js/npm。详见[一键部署说明](docs/一键部署.md)。
 
 ```sh

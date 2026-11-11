@@ -24,6 +24,8 @@ jobs:
           python-version: '3.10'
       - name: Verify source-compatible Shell deployment entry
         run: python -m unittest discover -s tests -p 'test_shell_deploy.py' -v
+      - name: Verify source update failure handling and safe repeated sourcing
+        run: python -m unittest discover -s tests -p 'test_source_update.py' -v
       - name: Test verified image deployment, reruns, backups and failed downloads
         run: python tests/deploy_smoke.py --dir "$RUNNER_TEMP/deploy-check" --project four-deploy-check-ci --port 18080 --direct --shell-source
       - name: Keep sanitized deployment evidence

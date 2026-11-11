@@ -2,7 +2,7 @@ name: four-layer-workbench
 
 services:
   db:
-    image: postgres:18-alpine
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-workbench}
