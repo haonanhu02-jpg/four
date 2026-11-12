@@ -43,7 +43,13 @@ COPY --chown=node:node database/migrations ./database/migrations
 COPY --chown=node:node --chmod=0644 scripts/migrate.mjs ./scripts/migrate.mjs
 COPY --chown=node:node --chmod=0644 scripts/bootstrap-admin.mjs ./scripts/bootstrap-admin.mjs
 COPY --chown=node:node --chmod=0644 scripts/database-connection.mjs ./scripts/database-connection.mjs
+# COPY --chmod can also apply file modes to source parent directories. A private
+# checkout can therefore leave /app/scripts at 0644: readable, not traversable.
+# This image contains code only; secrets are injected at runtime.
+RUN find /app -type d -exec chmod 0755 {} +
 USER node
+# Fail the build before backup/migration if the runtime user cannot read code.
+RUN node -e "const fs=require('node:fs'); for (const p of ['package.json','apps/api/package.json','packages/contracts/package.json','scripts/migrate.mjs','scripts/bootstrap-admin.mjs','scripts/database-connection.mjs','apps/api/dist/main.js','apps/api/dist/crypto.js','packages/contracts/dist/index.js']) fs.accessSync(p,fs.constants.R_OK)"
 EXPOSE 3000
 CMD ["node", "apps/api/dist/main.js"]
 
