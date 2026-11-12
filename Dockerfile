@@ -11,7 +11,8 @@ RUN npm ci --registry="$NPM_REGISTRY"
 
 FROM dependencies AS build
 COPY . .
-RUN npm run build
+# Vite copies public assets with their original modes from the private checkout.
+RUN npm run build && chmod -R a+rX /app/apps/web/dist
 
 FROM ${NODE_IMAGE} AS production-dependencies
 ARG NPM_REGISTRY=https://registry.npmjs.org
