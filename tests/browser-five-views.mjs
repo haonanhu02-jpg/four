@@ -157,6 +157,13 @@ try {
       'private HTTP password login',
     );
     assert.equal(await evaluate('fetch("/api/auth/me").then(r=>r.status)'), 200);
+    const savedId = await evaluate(
+      'document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench").add("daily",undefined,{title:"私有 HTTP 保存验证"}).then(item=>item.id)',
+    );
+    await wait(
+      `fetch('/api/data/export').then(r=>r.json()).then(d=>d.items.daily.some(item=>item.id===${JSON.stringify(savedId)}))`,
+      'private HTTP authenticated task persisted to server',
+    );
     await clickText('退出登录');
     await wait('!!document.querySelector("#username")', 'return to guest entry');
   }

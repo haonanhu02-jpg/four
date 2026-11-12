@@ -1,3 +1,4 @@
+import { randomUUID } from './uuid';
 import { normalizeDocument, type TransferDocument } from './data-transfer';
 import type { WorkItem } from './work-items';
 import type { WorkItemType } from './index';
@@ -181,7 +182,7 @@ export function documentFromTables(
       if (record.type && !type) throw Error(`${table.name} 第 ${index + 2} 行层级无法识别`);
       const level = type ?? 'daily';
       record.type = level;
-      record.id ??= crypto.randomUUID();
+      record.id ??= randomUUID();
       record.title ??= '';
       if (!['annual', 'monthly'].includes(level) && record.dueDate === null) delete record.dueDate;
       if (level !== 'daily' && record.completedAt === null) delete record.completedAt;

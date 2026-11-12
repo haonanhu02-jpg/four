@@ -1,3 +1,4 @@
+import { randomUUID } from './uuid';
 import { normalizeDocument, type TransferDocument } from './data-transfer';
 export function sampleDocument(date: string): TransferDocument {
   const year = Number(date.slice(0, 4)),
@@ -15,7 +16,7 @@ export function sampleDocument(date: string): TransferDocument {
     ['政策与资金：补助及税务事项推进', 23, 25],
   ] as const;
   const years = roots.map(([title, progress, weight]) => ({
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     year,
     title,
     note: '明确交付成果，持续推进并复盘',
@@ -31,7 +32,7 @@ export function sampleDocument(date: string): TransferDocument {
     ['会议（经营会 / 条线例会）', 2, 50, 10],
   ] as const;
   const months = monthly.map(([title, parent, progress, weight]) => ({
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     yearId: years[parent]!.id,
     month,
     title,
@@ -50,7 +51,7 @@ export function sampleDocument(date: string): TransferDocument {
     'GR 节点月度提醒一次，填渣款跟进挂起',
   ];
   const weeks = [0, 2, 4, 4, 1, 5, 3].map((parent, i) => ({
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     monthId: months[parent]!.id,
     wkStart: start,
     wkEnd: end,
@@ -77,7 +78,7 @@ export function sampleDocument(date: string): TransferDocument {
     [5, 20],
     [6, 10],
   ].map(([parent, minutes], i) => ({
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     weekId: weeks[parent!]!.id,
     date,
     title: actions[i],
