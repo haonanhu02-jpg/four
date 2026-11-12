@@ -3,11 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { effectiveProgress, weightedProgress } from '../packages/contracts/dist/index.js';
 
 const origin = process.argv[2] || 'http://localhost:8080';
 const output = path.resolve(process.env.BROWSER_ARTIFACT_DIR || 'artifacts/five-views/ui');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const privateHttp = process.env.BROWSER_PRIVATE_HTTP_TEST === '1';
 await fs.mkdir(output, { recursive: true });
 const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'five-views-browser-'));
 const chrome = spawn(
@@ -81,7 +83,17 @@ try {
   };
   const wait = async (expression, label) => {
     for (let i = 0; i < 200; i++) {
-      if (await evaluate(expression)) return;
+      try {
+        if (await evaluate(expression)) return;
+      } catch (error) {
+        // A reload replaces the execution context before the new page is ready.
+        if (
+          !/Inspected target navigated or closed|Execution context was destroyed|Cannot find context/.test(
+            error.message,
+          )
+        )
+          throw error;
+      }
       await delay(100);
     }
     throw Error('Timed out ' + label + ' ' + (await evaluate('document.body.innerText')));
@@ -122,6 +134,32 @@ try {
     mobile: false,
   });
   await call('Page.navigate', { url: origin });
+  if (privateHttp) {
+    await wait('!!document.querySelector("#username")', 'private HTTP login page');
+    assert.equal(await evaluate('window.isSecureContext'), false);
+    assert.equal(await evaluate('typeof crypto.randomUUID'), 'undefined');
+    const username = `lan-${randomUUID()}`;
+    await clickText('注册');
+    await input('#username', username);
+    await input('#password', '123456');
+    await evaluate('document.querySelector("form").requestSubmit()');
+    await wait(
+      '!!document.querySelector(".workbench")&&!document.querySelector(".wb-loading")',
+      'private HTTP registration',
+    );
+    await clickText('退出登录');
+    await wait('!!document.querySelector("#username")', 'private HTTP logout');
+    await input('#username', username);
+    await input('#password', '123456');
+    await evaluate('document.querySelector("form").requestSubmit()');
+    await wait(
+      '!!document.querySelector(".workbench")&&!document.querySelector(".wb-loading")',
+      'private HTTP password login',
+    );
+    assert.equal(await evaluate('fetch("/api/auth/me").then(r=>r.status)'), 200);
+    await clickText('退出登录');
+    await wait('!!document.querySelector("#username")', 'return to guest entry');
+  }
   await clickText('先以访客使用（仅本机保存）');
   await wait(
     '!!document.querySelector(".workbench")&&!document.querySelector(".wb-loading")',
@@ -264,6 +302,7 @@ try {
   assert.deepEqual(errors, []);
   const report = {
     passed: true,
+    privateHttp,
     fiveViews: true,
     autoModePreservesManual: true,
     nestedDays: true,

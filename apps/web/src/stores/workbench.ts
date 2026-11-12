@@ -1,3 +1,4 @@
+import { randomUUID } from '../lib/uuid';
 import { computed, reactive, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import {
@@ -174,7 +175,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   }
   function persist(item: WorkItem, action: local.Action, values: WorkItemValues = {}) {
     const owner = userId.value,
-      token = crypto.randomUUID(),
+      token = randomUUID(),
       previous = memory[item.id];
     memory[item.id] = {
       item: { ...item },
@@ -515,7 +516,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     const now = new Date().toISOString(),
       copy = {
         ...draft,
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         version: 0,
         deletedAt: null,
         archivedAt: null,
@@ -562,7 +563,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
         },
         now = new Date().toISOString();
       const item: WorkItem = {
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         type,
         version: 0,
         parentId: null,

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { randomUUID } from '../lib/uuid';
 import { ref, onMounted, watch } from 'vue';
 import {
   normalizeDocument,
@@ -134,7 +135,7 @@ async function prepare(doc: unknown, sourceMode = mode.value) {
     localRevision = fingerprint(board.localDocument());
     document.value = normalized.document;
     preview.value = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       mode: sourceMode,
       counts: documentCounts(normalized.document),
       current: documentCounts(board.localDocument()),
@@ -183,7 +184,7 @@ async function commit() {
       const mapping = new Map(
         Object.values(incoming.items)
           .flat()
-          .map((v) => [v.id, crypto.randomUUID()]),
+          .map((v) => [v.id, randomUUID()]),
       );
       const merged =
         p.mode === 'append'
@@ -203,7 +204,7 @@ async function commit() {
       await local.replaceLocal(local.GUEST, merged);
       await board.reloadLocal();
     } else {
-      commitJob ??= { previewId: p.id, operationId: crypto.randomUUID() };
+      commitJob ??= { previewId: p.id, operationId: randomUUID() };
       await execute({
         action: 'commit',
         body: commitJob,
@@ -245,7 +246,7 @@ async function clear() {
         )
       )
         return;
-      clearJob = { revision: state.revision, operationId: crypto.randomUUID() };
+      clearJob = { revision: state.revision, operationId: randomUUID() };
     }
     if (board.isGuest) {
       const doc = board.localDocument();

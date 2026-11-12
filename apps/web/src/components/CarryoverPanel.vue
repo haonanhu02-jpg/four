@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { randomUUID } from '../lib/uuid';
 import { onMounted, ref, watch } from 'vue';
 import type {
   Carryover,
@@ -71,7 +72,7 @@ async function resolve(carry: Carryover, choice: 'keep' | 'relink') {
   error.value = '';
   busy.value = true;
   const body = jobs.get(carry.id) ?? {
-    operationId: crypto.randomUUID(),
+    operationId: randomUUID(),
     baseVersion: carry.current.version,
     choice,
     ...(choice === 'relink' ? { annualId: selected.value[carry.id] } : {}),

@@ -1,3 +1,4 @@
+import { randomUUID } from './uuid';
 import type {
   AuthResponse,
   WorkItem,
@@ -6,7 +7,7 @@ import type {
   TransferDocument,
 } from '@workbench/contracts';
 export const GUEST = 'guest';
-export const clientTab = crypto.randomUUID();
+export const clientTab = randomUUID();
 export type Action = 'create' | 'update' | 'delete' | 'restore';
 export interface Command {
   operationId: string;
@@ -250,7 +251,7 @@ export async function enqueue(
         queue.put(
           plain({
             ...rejected,
-            operationId: crypto.randomUUID(),
+            operationId: randomUUID(),
             values: merged,
             state: 'queued',
             sent: false,
@@ -282,7 +283,7 @@ export async function enqueue(
           : last.baseVersion + 1
         : item.version;
     const command: Command = {
-      operationId: crypto.randomUUID(),
+      operationId: randomUUID(),
       owner,
       tab: clientTab,
       itemId: item.id,
@@ -347,7 +348,7 @@ export async function resolveCommands(
       queue.put(
         plain({
           ...last,
-          operationId: crypto.randomUUID(),
+          operationId: randomUUID(),
           action: ['delete', 'restore'].includes(last.action) ? last.action : 'update',
           values,
           baseVersion: remote.version,
@@ -417,7 +418,7 @@ export async function replaceLocal(owner: string, document: TransferDocument, ba
       await value(
         tx.objectStore('backups').put(
           plain({
-            id: crypto.randomUUID(),
+            id: randomUUID(),
             owner,
             createdAt: new Date().toISOString(),
             document: doc,

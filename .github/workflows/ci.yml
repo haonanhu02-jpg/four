@@ -101,6 +101,13 @@ jobs:
         run: |
           node --input-type=module -e "for (const path of ['/', '/api/health']) { const response = await fetch('http://localhost:8080' + path); if (!response.ok) throw new Error(path + ': ' + response.status); console.log(path + ' ready'); }"
 
+      - name: Verify real private-IP HTTP startup, login and browser functionality
+        run: |
+          sudo ip address add 192.168.3.110/32 dev lo
+          COMPOSE_APP_ORIGIN=http://192.168.3.110:8080 COOKIE_SECURE=false WEB_BIND_ADDRESS=0.0.0.0 docker compose up -d --no-build --pull never --wait --wait-timeout 180 api web
+          CHROME_PATH="$(command -v google-chrome || command -v chromium)" BROWSER_PRIVATE_HTTP_TEST=1 BROWSER_ARTIFACT_DIR=artifacts/private-http node tests/browser-five-views.mjs http://192.168.3.110:8080
+          docker compose up -d --no-build --pull never --wait --wait-timeout 180 api web
+
       - name: Exercise offline editing and account isolation in Chrome
         run: CHROME_PATH="$(command -v google-chrome || command -v chromium)" npm run test:browser
 
@@ -133,6 +140,7 @@ jobs:
             artifacts/admin-formats/browser/browser-check.json
             artifacts/admin-formats/browser/*.png
             artifacts/five-views/ui/
+            artifacts/private-http/
             artifacts/stage6/capacity.json
           if-no-files-found: ignore
 

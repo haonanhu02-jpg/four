@@ -47,6 +47,8 @@ services:
       AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?Set AUTH_TOKEN_SECRET in .env}
       APP_ORIGIN: ${COMPOSE_APP_ORIGIN:-http://localhost:8080}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Source deployments support HTTP on private IPs; production Compose stays HTTPS-only.
+      ALLOW_PRIVATE_HTTP: ${ALLOW_PRIVATE_HTTP:-true}
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-7}
     depends_on:
       db:

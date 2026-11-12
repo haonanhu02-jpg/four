@@ -12,11 +12,17 @@ source ./update-four.sh
 
 也支持 `bash ./update-four.sh`。默认目录为 `~/four-workbench`，每次重复执行同一命令即可更新。默认项目名 `four-layer-workbench`，现有数据库卷、账号、`.env` 和密钥保留。不要变更 Compose 项目名或删除数据卷。
 
-默认网站地址为 `http://192.168.3.110:5001`，监听 `0.0.0.0:5001`。首次部署及已有部署都会配置端口 5001；数据库密码、令牌密钥及账号数据保留。更换服务器时可指定访问地址：
+源码部署的 `compose.yaml` 显式开启 `ALLOW_PRIVATE_HTTP=true`，允许私有 IP 地址使用 HTTP，并配合 `COOKIE_SECURE=false`。该模式只接受 RFC1918 IPv4（10/8、172.16/12、192.168/16）或 IPv6 唯一本地地址，不放开公网 IP/域名的 HTTP。`compose.production.yaml` 未开启该模式，继续要求非本机地址使用 HTTPS 和 Secure Cookie。配置未开启时，后端也保持原有 HTTPS 要求。
+
+默认网站地址为 `http://192.168.3.110:5001`，监听 `0.0.0.0:5001`。首次部署及已有部署都会配置端口 5001；数据库密码、令牌密钥及账号数据保留。更换内网服务器时可指定访问地址：
 
 ```bash
-FOUR_ORIGIN=http://服务器公网IP:5001 source ./update-four.sh
+FOUR_ORIGIN=http://192.168.3.111:5001 source ./update-four.sh
 ```
+
+公网访问地址应配置为 HTTPS 域名。内网 HTTP 下，页面和事项编辑支持不提供 `crypto.randomUUID()` 的浏览器上下文，仍使用密码学随机数生成事项编号；Service Worker 的离线重新打开和 PWA 安装功能需要 HTTPS 等浏览器安全上下文。
+
+本机已检出仓库时，也可以使用其中的脚本，例如 `source /root/four-workbench/update-four.sh`。该路径与服务器上实际部署目录一致；外部脚本则以下载时保存的真实路径为准。
 
 已有 `.env` 会先备份到 `.local/source-config-backups/`，仅更新网站端口、访问来源、监听地址及对应 Cookie 配置，其他内容保留。重复执行且配置一致时不会重复修改。可用 `FOUR_PORT` 自定义端口、`FOUR_ORIGIN` 自定义浏览器访问地址；HTTPS 域名由自己的反向代理提供。需要开放服务器防火墙/安全组的 5001 端口。
 
