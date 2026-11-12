@@ -50,8 +50,8 @@ FROM ${NGINX_IMAGE} AS web
 ARG SOURCE_REVISION=unversioned
 ARG RELEASE_VERSION=1.2.0
 LABEL org.opencontainers.image.title="Four Layer Workbench Web" org.opencontainers.image.version=$RELEASE_VERSION org.opencontainers.image.revision=$SOURCE_REVISION
-COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
-COPY deploy/security-headers.conf /etc/nginx/security-headers.conf
+COPY --chmod=0644 deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chmod=0644 deploy/security-headers.conf /etc/nginx/security-headers.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 USER 101
 EXPOSE 8080
