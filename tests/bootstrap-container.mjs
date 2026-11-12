@@ -44,7 +44,12 @@ try {
   await admin.connect();
   connected = true;
   await admin.query(`CREATE DATABASE "${database}"`);
-  compose(['-e', 'DATABASE_URL', 'api', 'node', 'scripts/migrate.mjs']);
+  compose([
+    'api',
+    'node',
+    '-e',
+    "const fs=require('node:fs'); for (const p of ['scripts/database-connection.mjs','scripts/migrate.mjs','scripts/bootstrap-admin.mjs']) fs.accessSync(p,fs.constants.R_OK);",
+  ]);
   // Root with cap_drop: ALL must be able to read every imported code file too.
   compose([
     '--user',
@@ -54,6 +59,7 @@ try {
     '-e',
     "const fs=require('node:fs'); for (const p of ['package.json','apps/api/package.json','packages/contracts/package.json','scripts/bootstrap-admin.mjs','scripts/migrate.mjs','scripts/database-connection.mjs']) fs.accessSync(p,fs.constants.R_OK); require('dotenv'); require('pg'); import('./apps/api/dist/crypto.js'); import('./packages/contracts/dist/index.js');",
   ]);
+  compose(['-e', 'DATABASE_URL', 'api', 'node', 'scripts/migrate.mjs']);
   assert.notEqual(
     process.getuid(),
     1000,

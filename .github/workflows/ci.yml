@@ -82,7 +82,9 @@ jobs:
         run: npm run test:integration
 
       - name: Reproduce private source checkout permissions
-        run: git ls-files -z | xargs -0 chmod go-rwx
+        run: |
+          git ls-files -z | xargs -0 chmod go-rwx
+          find apps packages scripts database deploy -type d ! -path '*/node_modules*' ! -path '*/dist*' -exec chmod go-rwx {} +
 
       - name: Build application images
         run: docker compose build
