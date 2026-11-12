@@ -81,10 +81,16 @@ jobs:
       - name: Exercise real database and employee login flows
         run: npm run test:integration
 
+      - name: Reproduce private source checkout permissions
+        run: chmod 600 package.json apps/api/package.json packages/contracts/package.json scripts/*.mjs
+
       - name: Build application images
         run: docker compose build
         env:
           SOURCE_REVISION: ${{ github.sha }}
+
+      - name: Verify administrator bootstrap with restricted container permissions
+        run: node tests/bootstrap-container.mjs
 
       - name: Start the composed application
         run: docker compose up -d --wait --wait-timeout 180

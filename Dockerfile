@@ -30,15 +30,18 @@ LABEL org.opencontainers.image.title="Four Layer Workbench API" org.opencontaine
 ENV NODE_ENV=production PORT=3000 APP_VERSION=$RELEASE_VERSION
 WORKDIR /app
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
-COPY --chown=node:node package.json ./package.json
-COPY --chown=node:node apps/api/package.json ./apps/api/package.json
-COPY --chown=node:node packages/contracts/package.json ./packages/contracts/package.json
+# Git checkout under the deployment's umask 077 can produce mode 0600.
+# Bootstrap runs as the host UID with all capabilities dropped, so explicitly
+# make code/metadata readable while credentials remain outside the image.
+COPY --chown=node:node --chmod=0644 package.json ./package.json
+COPY --chown=node:node --chmod=0644 apps/api/package.json ./apps/api/package.json
+COPY --chown=node:node --chmod=0644 packages/contracts/package.json ./packages/contracts/package.json
 COPY --from=build --chown=node:node /app/apps/api/dist ./apps/api/dist
 COPY --from=build --chown=node:node /app/packages/contracts/dist ./packages/contracts/dist
 COPY --chown=node:node database/migrations ./database/migrations
-COPY --chown=node:node scripts/migrate.mjs ./scripts/migrate.mjs
-COPY --chown=node:node scripts/bootstrap-admin.mjs ./scripts/bootstrap-admin.mjs
-COPY --chown=node:node scripts/database-connection.mjs ./scripts/database-connection.mjs
+COPY --chown=node:node --chmod=0644 scripts/migrate.mjs ./scripts/migrate.mjs
+COPY --chown=node:node --chmod=0644 scripts/bootstrap-admin.mjs ./scripts/bootstrap-admin.mjs
+COPY --chown=node:node --chmod=0644 scripts/database-connection.mjs ./scripts/database-connection.mjs
 USER node
 EXPOSE 3000
 CMD ["node", "apps/api/dist/main.js"]
