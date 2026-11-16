@@ -186,10 +186,67 @@ try {
   await wait('Object.values(board.records).filter(v=>v.type==="daily").length===7', 'sample');
   if (await evaluate('!!document.querySelector(".wb-data-dialog[open]")'))
     await click('[aria-label="关闭数据管理"]');
+  for (const type of ['annual', 'monthly']) {
+    await view(type);
+    const original = await evaluate(
+      'document.querySelector(".wb-goals-table tbody tr").dataset.itemId',
+    );
+    const originalWeight = await evaluate(`board.records[${JSON.stringify(original)}].weight`);
+    const weightInput = `[data-item-id="${original}"] input[aria-label$="权重"]`;
+    await input(weightInput, String(originalWeight + 10));
+    await wait(
+      'document.querySelector(".wb-weight-summary.over")?.textContent.includes("已超出 10%")',
+      'overweight warning',
+    );
+    await shot(`weight-${type}-over`);
+    await input(weightInput, String(originalWeight - 10));
+    await wait(
+      'document.querySelector(".wb-weight-summary.under")?.textContent.includes("尚差 10%")',
+      'underweight reminder',
+    );
+    await input(weightInput, String(originalWeight));
+    await wait('!!document.querySelector(".wb-weight-summary.balanced")', 'weights balanced');
+    const height = await evaluate(
+      'document.querySelector(".wb-goals-table tbody tr").getBoundingClientRect().height',
+    );
+    assert.ok(height < 130, `Goal row should be compact: ${height}`);
+    await input(
+      `[aria-label="搜索${type === 'annual' ? '年度目标' : '月度目标'}"]`,
+      'no matching goal',
+    );
+    await wait('!document.querySelector(".wb-goals-table")', 'search has no matches');
+    await click(`[data-add-type="${type}"]`);
+    await wait(
+      `!!document.querySelector('.wb-goals-table tbody tr')&&document.querySelector('.wb-goals-table tbody tr').dataset.itemId!==${JSON.stringify(original)}`,
+      'new goal first',
+    );
+    const added = await evaluate(
+      'document.querySelector(".wb-goals-table tbody tr").dataset.itemId',
+    );
+    await wait(
+      `document.activeElement.dataset.titleId===${JSON.stringify(added)}`,
+      'new goal focused',
+    );
+    await wait('!board.hasUnpersisted', 'new goal persisted');
+    await call('Page.reload');
+    await wait(
+      '!!document.querySelector(".workbench")&&!document.querySelector(".wb-loading")',
+      'new order after reload',
+    );
+    await evaluate(
+      'window.board=document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench");true',
+    );
+    await view(type);
+    assert.equal(
+      await evaluate('document.querySelector(".wb-goals-table tbody tr").dataset.itemId'),
+      added,
+    );
+    await evaluate(`board.remove(board.records[${JSON.stringify(added)}])`);
+  }
   await view('annual');
   assert.equal(await evaluate('document.querySelectorAll(".wb-goals-table tbody tr").length'), 4);
   const goal = await evaluate(
-    'JSON.parse(JSON.stringify(Object.values(board.records).find(v=>v.type==="annual")))',
+    'JSON.parse(JSON.stringify(Object.values(board.records).find(v=>v.type==="annual"&&!v.deletedAt&&!v.archivedAt)))',
   );
   await click(`[data-item-id="${goal.id}"] [aria-label="年度进度模式"]`);
   await clickText('月目标自动汇总');
@@ -205,7 +262,7 @@ try {
   await wait(
     `document.querySelector('[data-metric="annual"] strong').textContent.trim()===${JSON.stringify(
       `${weightedProgress(
-        records.filter((v) => v.type === 'annual'),
+        records.filter((v) => v.type === 'annual' && !v.deletedAt && !v.archivedAt),
         (v) => effectiveProgress(v, records),
       )}%`,
     )}`,
@@ -248,7 +305,7 @@ try {
   assert.equal(
     await evaluate('document.querySelector("[data-chart-metric=annual]").textContent'),
     `${weightedProgress(
-      finalRecords.filter((v) => v.type === 'annual'),
+      finalRecords.filter((v) => v.type === 'annual' && !v.deletedAt && !v.archivedAt),
       (v) => effectiveProgress(v, finalRecords),
     )}%`,
   );
@@ -309,6 +366,9 @@ try {
   assert.deepEqual(errors, []);
   const report = {
     passed: true,
+    newGoalsFirstAfterReload: true,
+    goalWeightWarnings: true,
+    compactGoalRows: true,
     privateHttp,
     fiveViews: true,
     autoModePreservesManual: true,

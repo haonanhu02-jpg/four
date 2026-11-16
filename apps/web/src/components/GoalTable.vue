@@ -10,6 +10,7 @@ import {
 import { useWorkbenchStore } from '../stores/workbench';
 import ParentPicker from './ParentPicker.vue';
 import ChoicePicker from './ChoicePicker.vue';
+import { newestFirst } from '../lib/item-order';
 const props = defineProps<{ type: 'annual' | 'monthly' }>();
 const emit = defineEmits<{
   open: [item: WorkItem];
@@ -20,7 +21,7 @@ const board = useWorkbenchStore();
 const filter = ref('all'),
   search = ref(''),
   limit = ref(50);
-const all = computed(() => Object.values(board.records));
+const all = computed(() => Object.values(board.records).sort(newestFirst));
 const goals = computed(() =>
   all.value.filter(
     (v) =>
@@ -43,7 +44,23 @@ const rows = computed(() =>
 watch([filter, search, () => board.selection.year, () => board.selection.month], () => {
   limit.value = 50;
 });
-const weight = computed(() => goals.value.reduce((sum, v) => sum + (v.weight ?? 0), 0));
+watch(
+  () => board.creating,
+  (creating) => {
+    if (creating) {
+      filter.value = 'all';
+      search.value = '';
+      limit.value = 50;
+    }
+  },
+);
+const weight = computed(() =>
+  Number(goals.value.reduce((sum, v) => sum + (v.weight ?? 0), 0).toFixed(4)),
+);
+const weightState = computed(() =>
+  weight.value > 100 ? 'over' : weight.value === 100 ? 'balanced' : 'under',
+);
+const weightDifference = computed(() => Number(Math.abs(weight.value - 100).toFixed(2)));
 function edit(item: WorkItem, field: keyof WorkItemValues, event: Event, number = false) {
   const value = (event.target as HTMLInputElement).value;
   board.edit(item, {
@@ -75,7 +92,16 @@ const children = (item: WorkItem) =>
           placeholder="标题或说明"
           type="search"
       /></label>
-      <small>权重合计 {{ Number(weight.toFixed(1)) }}% · 按实际权重归一计算</small>
+      <small class="wb-weight-badge" :class="weightState" :data-weight-state="weightState">
+        权重合计 {{ Number(weight.toFixed(2)) }}%
+        {{
+          weightState === 'balanced'
+            ? '✓ 已配平'
+            : weightState === 'over'
+              ? `⚠ 超出 ${weightDifference}%`
+              : `· 尚差 ${weightDifference}%`
+        }}
+      </small>
     </div>
     <table v-if="rows.length" class="wb-goals-table">
       <caption class="sr-only">
@@ -118,7 +144,7 @@ const children = (item: WorkItem) =>
               :value="item.note"
               :aria-label="`${name}说明`"
               placeholder="衡量标准 / 交付物"
-              rows="2"
+              rows="1"
               maxlength="10000"
               @input="edit(item, 'note', $event)"
               @blur="board.save(item.id)"
@@ -234,6 +260,22 @@ const children = (item: WorkItem) =>
       </tbody>
     </table>
     <p v-else class="wb-insight-empty">当前筛选没有匹配目标。</p>
+    <p
+      v-if="goals.length"
+      class="wb-weight-summary"
+      :class="weightState"
+      role="status"
+      aria-live="polite"
+    >
+      {{ type === 'annual' ? `${board.selection.year} 年` : board.selection.month }}共
+      {{ goals.length }} 项{{ name }}，权重合计 {{ Number(weight.toFixed(2)) }}% —
+      <template v-if="weightState === 'over'"
+        >已超出 {{ weightDifference }}%，请调整权重，使合计为 100%。</template
+      >
+      <template v-else-if="weightState === 'balanced'">已配平 100%，加权进度口径正常。</template>
+      <template v-else>尚差 {{ weightDifference }}%，请继续分配权重。</template>
+      <small v-if="weightState !== 'balanced'">进度仍按实际权重归一计算。</small>
+    </p>
     <button v-if="rows.length > limit" type="button" class="wb-load-more" @click="limit += 50">
       加载更多（{{ limit }}/{{ rows.length }}）
     </button>

@@ -1,4 +1,5 @@
 import { randomUUID } from '../lib/uuid';
+import { newestFirst } from '../lib/item-order';
 import { computed, reactive, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import {
@@ -110,9 +111,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
           : v.date === selection.date;
   const active = (v: WorkItem) => !v.deletedAt && !v.archivedAt;
   function rebuild() {
-    const all = Object.values(records).sort(
-      (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
-    );
+    const all = Object.values(records).sort(newestFirst);
     for (const type of kinds) {
       const rows = all.filter((v) => v.type === type && active(v) && matches(v));
       groups[type] = {

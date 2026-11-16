@@ -4,6 +4,7 @@ import { activeItem, type WorkItem, type WorkItemType } from '@workbench/contrac
 import { useWorkbenchStore } from '../stores/workbench';
 import { dayLabel } from '../lib/dates';
 import WorkItemCard from './WorkItemCard.vue';
+import { newestFirst } from '../lib/item-order';
 const emit = defineEmits<{
   open: [item: WorkItem];
   remove: [item: WorkItem];
@@ -13,7 +14,7 @@ const emit = defineEmits<{
 const board = useWorkbenchStore();
 const opened = ref<Record<string, boolean>>({});
 const limit = ref(50);
-const all = computed(() => Object.values(board.records).filter(activeItem));
+const all = computed(() => Object.values(board.records).filter(activeItem).sort(newestFirst));
 const weeks = computed(() =>
   all.value.filter(
     (v) =>
