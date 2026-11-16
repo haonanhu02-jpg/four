@@ -36,6 +36,14 @@ const fields = {
   terminationReason: '终止原因',
 };
 function differences(before: WorkItem | null, after: WorkItem | null) {
+  const value = (item: WorkItem | null, key: string) =>
+    key === 'terminated'
+      ? Boolean(item?.terminated)
+      : key === 'terminationReason'
+        ? (item?.terminationReason ?? '')
+        : key === 'progressMode'
+          ? (item?.progressMode ?? 'manual')
+          : (item?.[key as keyof WorkItem] ?? null);
   const display = (key: string, value: unknown) =>
     key === 'terminated'
       ? value
@@ -48,14 +56,10 @@ function differences(before: WorkItem | null, after: WorkItem | null) {
         : String(value ?? '未设置');
   return (
     Object.entries(fields)
-      .filter(
-        ([key]) =>
-          JSON.stringify(before?.[key as keyof WorkItem]) !==
-          JSON.stringify(after?.[key as keyof WorkItem]),
-      )
+      .filter(([key]) => JSON.stringify(value(before, key)) !== JSON.stringify(value(after, key)))
       .map(
         ([key, label]) =>
-          `${label}：${display(key, before?.[key as keyof WorkItem])} → ${display(key, after?.[key as keyof WorkItem])}`,
+          `${label}：${display(key, value(before, key))} → ${display(key, value(after, key))}`,
       )
       .join('；') || '记录创建或关联变动'
   );
