@@ -7,6 +7,8 @@ export const transferColumns: readonly { key: keyof WorkItem; label: string }[] 
   { key: 'id', label: '编号' },
   { key: 'parentId', label: '上级编号' },
   { key: 'title', label: '标题' },
+  { key: 'terminated', label: '已终止' },
+  { key: 'terminationReason', label: '终止原因' },
   { key: 'note', label: '说明' },
   { key: 'year', label: '年度' },
   { key: 'month', label: '月份' },
@@ -101,7 +103,7 @@ export function documentRows(doc: TransferDocument): string[][] {
           const value = item[c.key];
           if (value == null) return '';
           if (c.key === 'type') return levelNames[type];
-          if (c.key === 'done') return value ? '是' : '否';
+          if (c.key === 'done' || c.key === 'terminated') return value ? '是' : '否';
           if (c.key === 'status')
             return (
               (
@@ -155,7 +157,7 @@ export function documentFromTables(
               `${table.name} 第 ${index + 2} 行的 ${transferColumns.find((c) => c.key === key)?.label} 不是数字`,
             );
           record[key] = number;
-        } else if (key === 'done') {
+        } else if (key === 'done' || key === 'terminated') {
           if (!['是', '否', 'true', 'false', '1', '0', '已完成', '未完成'].includes(value))
             throw Error('完成列请填写“是”或“否”');
           record[key] = ['是', 'true', '1', '已完成'].includes(value);

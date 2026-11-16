@@ -80,4 +80,20 @@ export class HistoryController {
   ) {
     return this.history.changes(await this.user(req), q);
   }
+  @Get('history/projects')
+  async projects(
+    @Req() req: Request,
+    @Query(new SchemaPipe(pageSchema.extend({ year: z.coerce.number().int().min(1970).max(9999) })))
+    q: { year: number; limit: number; offset: number },
+  ) {
+    return this.history.projects(await this.user(req), q);
+  }
+  @Post('history/projects/baseline')
+  async baseline(
+    @Req() req: Request,
+    @Body(new SchemaPipe(z.object({ year: z.number().int().min(1970).max(9999) }).strict()))
+    body: { year: number },
+  ) {
+    return this.history.baseline(await this.user(req), body.year);
+  }
 }

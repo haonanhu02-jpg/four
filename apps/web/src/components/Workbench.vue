@@ -23,6 +23,7 @@ import GoalTable from './GoalTable.vue';
 import WeeklyExecution from './WeeklyExecution.vue';
 import ChartsPanel from './ChartsPanel.vue';
 import PlanTree from './PlanTree.vue';
+import ProjectChanges from './ProjectChanges.vue';
 import '../workbench.css';
 import '../five-views.css';
 defineProps<{ loggingOut: boolean; logoutError: string }>();
@@ -601,6 +602,7 @@ onUnmounted(() => {
     <ChartsPanel v-if="store.view === 'charts' && !store.loading" @open="openItem" />
     <PlanTree v-if="store.view === 'tree' && !store.loading" @open="openItem" />
     <AnnualExecution v-if="store.view === 'annual' && !store.loading" @open="openItem" />
+    <ProjectChanges v-if="store.view === 'annual' && !store.loading" />
     <AlignmentPanel
       v-if="!store.loading && ['annual', 'monthly', 'weekly'].includes(store.view)"
       @open="openItem"

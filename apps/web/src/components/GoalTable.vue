@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import {
   effectiveProgress,
   itemComplete,
+  itemState,
   type WorkItem,
   type WorkItemType,
   type WorkItemValues,
@@ -38,7 +39,10 @@ const rows = computed(() =>
     (v) =>
       (!search.value ||
         `${v.title} ${v.note}`.toLowerCase().includes(search.value.toLowerCase())) &&
-      (filter.value === 'all' || itemComplete(v, all.value) === (filter.value === 'complete')),
+      (filter.value === 'all' ||
+        (filter.value === 'incomplete'
+          ? !v.terminated && !itemComplete(v, all.value)
+          : itemState(v, all.value) === filter.value)),
   ),
 );
 watch([filter, search, () => board.selection.year, () => board.selection.month], () => {
@@ -55,8 +59,29 @@ watch(
   },
 );
 const weight = computed(() =>
-  Number(goals.value.reduce((sum, v) => sum + (v.weight ?? 0), 0).toFixed(4)),
+  Number(
+    goals.value
+      .filter((v) => !v.terminated)
+      .reduce((sum, v) => sum + (v.weight ?? 0), 0)
+      .toFixed(4),
+  ),
 );
+const states = {
+  all: '全部',
+  incomplete: '未完成',
+  doing: '进行中',
+  complete: '已完成',
+  todo: '未开始',
+  terminated: '已终止',
+};
+const stateCount = (key: string) =>
+  goals.value.filter(
+    (v) =>
+      key === 'all' ||
+      (key === 'incomplete'
+        ? !v.terminated && !itemComplete(v, all.value)
+        : itemState(v, all.value) === key),
+  ).length;
 const weightState = computed(() =>
   weight.value > 100 ? 'over' : weight.value === 100 ? 'balanced' : 'under',
 );
@@ -76,13 +101,13 @@ const children = (item: WorkItem) =>
     <div class="wb-table-filters">
       <div class="wb-filter-tabs" :aria-label="`${name}完成筛选`">
         <button
-          v-for="(label, key) in { all: '全部', incomplete: '未完成', complete: '已完成' }"
+          v-for="(label, key) in states"
           :key="key"
           type="button"
           :aria-pressed="filter === key"
           @click="filter = key"
         >
-          {{ label }}
+          {{ label }} <strong>{{ stateCount(key) }}</strong>
         </button>
       </div>
       <label class="wb-table-search"
@@ -116,6 +141,7 @@ const children = (item: WorkItem) =>
           <th scope="col">权重</th>
           <th scope="col">{{ type === 'annual' ? '预计完成' : '截止日期' }}</th>
           <th scope="col">进度</th>
+          <th scope="col">状态</th>
           <th scope="col">拆解与操作</th>
         </tr>
       </thead>
@@ -230,6 +256,29 @@ const children = (item: WorkItem) =>
                 >自动 · 手动值 {{ item.progress }}% 保留</small
               >
             </div>
+          </td>
+          <td data-label="状态">
+            <ChoicePicker
+              :model-value="item.terminated ? 'terminated' : 'active'"
+              :label="`${name}执行状态`"
+              :options="[
+                {
+                  value: 'active',
+                  label: item.terminated ? '恢复执行' : states[itemState(item, all)],
+                },
+                { value: 'terminated', label: '已终止' },
+              ]"
+              @update:model-value="(v) => board.edit(item, { terminated: v === 'terminated' })"
+            />
+            <input
+              v-if="item.terminated"
+              class="wb-termination-reason"
+              aria-label="终止原因"
+              placeholder="记录终止原因"
+              :value="item.terminationReason ?? ''"
+              @input="edit(item, 'terminationReason', $event)"
+              @blur="board.save(item.id)"
+            />
           </td>
           <td data-label="拆解与操作">
             <small

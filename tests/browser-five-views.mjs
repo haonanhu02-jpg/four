@@ -164,6 +164,42 @@ try {
       `fetch('/api/data/export').then(r=>r.json()).then(d=>d.items.daily.some(item=>item.id===${JSON.stringify(savedId)}))`,
       'private HTTP authenticated task persisted to server',
     );
+    const projectId = await evaluate(
+      'document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench").add("annual",undefined,{title:"年初项目验证",note:"初始交付物",weight:100}).then(item=>item.id)',
+    );
+    await wait(
+      `fetch('/api/data/export').then(r=>r.json()).then(d=>d.items.annual.some(item=>item.id===${JSON.stringify(projectId)}))`,
+      'annual project synced',
+    );
+    await view('annual');
+    await wait(
+      'document.querySelector(".wb-project-changes")?.textContent.includes("最早留存记录")',
+      'cloud change history visible',
+    );
+    await evaluate('window.confirm=()=>true;true');
+    await clickText('记录年初计划基线');
+    await wait(
+      'document.querySelector(".wb-project-changes")?.textContent.includes("年初计划基线记录于")',
+      'annual baseline recorded',
+    );
+    await evaluate(
+      `(()=>{const b=document.querySelector('#app').__vue_app__.config.globalProperties.$pinia._s.get('workbench');b.edit(b.records[${JSON.stringify(projectId)}],{title:'变更后项目验证'});return b.save(${JSON.stringify(projectId)});})()`,
+    );
+    await wait(
+      `fetch('/api/data/export').then(r=>r.json()).then(d=>d.items.annual.some(item=>item.id===${JSON.stringify(projectId)}&&item.title==='变更后项目验证'))`,
+      'changed project synced',
+    );
+    await clickText('刷新变动');
+    await wait(
+      'document.querySelector(".wb-project-changes")?.textContent.includes("变更后项目验证")',
+      'current plan refreshed',
+    );
+    await click('.wb-project-comparison summary');
+    assert.ok(
+      await evaluate(
+        'document.querySelector(".wb-project-columns").textContent.includes("年初项目验证")',
+      ),
+    );
     await clickText('退出登录');
     await wait('!!document.querySelector("#username")', 'return to guest entry');
   }
@@ -248,6 +284,24 @@ try {
   const goal = await evaluate(
     'JSON.parse(JSON.stringify(Object.values(board.records).find(v=>v.type==="annual"&&!v.deletedAt&&!v.archivedAt)))',
   );
+  await click(`[data-item-id="${goal.id}"] [aria-label="年度目标执行状态"]`);
+  await clickText('已终止');
+  await wait(`board.records[${JSON.stringify(goal.id)}].terminated===true`, 'goal terminated');
+  await input(`[data-item-id="${goal.id}"] [aria-label="终止原因"]`, '方向调整，保留历史');
+  const goalFilter = async (label) =>
+    evaluate(
+      `[...document.querySelectorAll('[aria-label="年度目标完成筛选"] button')].find(e=>e.textContent.trim().startsWith(${JSON.stringify(label)})).click()`,
+    );
+  await goalFilter('未完成');
+  await wait(
+    `!document.querySelector('[data-item-id="${goal.id}"]')`,
+    'terminated excluded from unfinished',
+  );
+  await goalFilter('已终止');
+  await click(`[data-item-id="${goal.id}"] [aria-label="年度目标执行状态"]`);
+  await clickText('恢复执行');
+  await goalFilter('全部');
+  await wait(`!!document.querySelector('[data-item-id="${goal.id}"]')`, 'goal resumed');
   await click(`[data-item-id="${goal.id}"] [aria-label="年度进度模式"]`);
   await clickText('月目标自动汇总');
   await wait(`!!document.querySelector('[data-auto-progress="${goal.id}"]')`, 'auto mode');
@@ -274,6 +328,36 @@ try {
   await click(`[data-item-id="${goal.id}"] [aria-label="年度进度模式"]`);
   await clickText('月目标自动汇总');
   await view('weekly');
+  const month = await evaluate(
+    'board.add("monthly",undefined,{title:"待排本周的月目标"}).then(v=>v.id)',
+  );
+  await wait(
+    `!!document.querySelector('[data-unplanned-month="${month}"]')`,
+    'monthly goal automatically in week view',
+  );
+  const plannedWeek = await evaluate(
+    `board.add('weekly',${JSON.stringify(month)},{title:'为月目标安排本周'}).then(v=>v.id)`,
+  );
+  await wait(
+    `!document.querySelector('[data-unplanned-month="${month}"]')`,
+    'scheduled monthly goal leaves reminder',
+  );
+  await evaluate(
+    `board.remove(board.records[${JSON.stringify(plannedWeek)}]).then(()=>board.remove(board.records[${JSON.stringify(month)}]))`,
+  );
+  const orphan = await evaluate(
+    'board.add("daily",undefined,{parentId:null,title:"未挂周任务验证"}).then(v=>v.id)',
+  );
+  await wait(
+    'document.querySelector(".wb-unlinked-days h3")?.textContent.includes("未挂周任务的待办 1 条")',
+    'orphan count',
+  );
+  await click('.wb-unlinked-days button');
+  await wait(
+    `!!document.querySelector('.wb-unlinked-days [data-item-id="${orphan}"]')`,
+    'orphan expands',
+  );
+  await evaluate(`board.remove(board.records[${JSON.stringify(orphan)}])`);
   await clickText('全部收起');
   assert.equal(await evaluate('document.querySelectorAll(".wb-embedded-days").length'), 0);
   await clickText('全部展开');

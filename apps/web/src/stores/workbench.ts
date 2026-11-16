@@ -703,6 +703,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     saveLabel,
     visible,
     initialize,
+    sync,
     load,
     edit,
     save,

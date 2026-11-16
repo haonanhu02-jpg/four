@@ -388,7 +388,7 @@ test('repeated wrong passwords are throttled by employee number and IP', async (
 test('database migrations can be run repeatedly without duplicating schema', async () => {
   await migrate(process.env.DATABASE_URL);
   const applied = await pool.query('SELECT count(*)::integer AS count FROM schema_migrations');
-  assert.equal(applied.rows[0].count, 7);
+  assert.equal(applied.rows[0].count, 8);
 });
 
 const chain = {};
@@ -2212,4 +2212,102 @@ test('admin: concurrent actions cannot remove the last enabled administrator', a
     });
     assert.equal(denied.response.status, 409);
   }
+});
+
+test('terminated items retain data, stop rollover and preserve immutable annual baseline with account-scoped change logs', async () => {
+  const account = await featureAccount('termination-projects');
+  const goal = await createItem(
+    'annual',
+    { year: 2032, title: 'Initial annual plan', note: 'Initial delivery', weight: 60 },
+    account.cookie,
+  );
+  const recorded = await request('/history/projects/baseline', {
+    method: 'POST',
+    cookie: account.cookie,
+    body: { year: 2032 },
+  });
+  assert.equal(recorded.response.status, 201);
+  const stopped = await updateItem(
+    goal,
+    {
+      title: 'Changed annual plan',
+      weight: 40,
+      terminated: true,
+      terminationReason: 'Project direction changed',
+    },
+    account.cookie,
+  );
+  assert.equal(stopped.terminated, true);
+  assert.equal(stopped.terminationReason, 'Project direction changed');
+  const comparison = await request('/history/projects?year=2032', { cookie: account.cookie });
+  assert.equal(comparison.response.status, 200, JSON.stringify(comparison.body));
+  assert.ok(comparison.body.baselineAt);
+  const project = comparison.body.projects.find((v) => v.current.id === goal.id);
+  assert.equal(project.initial.title, 'Initial annual plan');
+  assert.equal(project.current.title, 'Changed annual plan');
+  assert.ok(
+    comparison.body.changes.some(
+      (v) => v.before?.title === 'Initial annual plan' && v.after?.terminated === true,
+    ),
+  );
+  await request('/history/projects/baseline', {
+    method: 'POST',
+    cookie: account.cookie,
+    body: { year: 2032 },
+  });
+  const unchanged = await request('/history/projects?year=2032', { cookie: account.cookie });
+  assert.equal(unchanged.body.projects[0].initial.weight, 60);
+  const monthly = await createItem(
+    'monthly',
+    {
+      month: '2001-01',
+      title: 'Stopped month',
+      terminated: true,
+      terminationReason: 'No longer needed',
+      parentId: goal.id,
+    },
+    account.cookie,
+  );
+  const weekly = await createItem(
+    'weekly',
+    {
+      startDate: '2001-01-01',
+      endDate: '2001-01-07',
+      title: 'Stopped week',
+      terminated: true,
+      parentId: monthly.id,
+    },
+    account.cookie,
+  );
+  const daily = await createItem(
+    'daily',
+    { date: '2001-01-01', title: 'Stopped day', terminated: true, parentId: weekly.id },
+    account.cookie,
+  );
+  const rollover = await request('/rollover/reconcile', {
+    method: 'POST',
+    cookie: account.cookie,
+    body: {},
+  });
+  assert.equal(rollover.response.status, 201);
+  assert.deepEqual(rollover.body.changed, { monthly: 0, weekly: 0, daily: 0 });
+  for (const value of [monthly, weekly, daily]) {
+    const result = await request(`/work-items/${value.type}/${value.id}`, {
+      cookie: account.cookie,
+    });
+    assert.equal(result.body.item.terminated, true);
+    assert.equal(result.body.item.rolloverCount, 0);
+  }
+  const exported = await request('/data/export', { cookie: account.cookie });
+  assert.equal(
+    exported.body.items.monthly.find((v) => v.id === monthly.id).terminationReason,
+    'No longer needed',
+  );
+  const restored = await updateItem(stopped, { terminated: false }, account.cookie);
+  assert.equal(restored.terminated, false);
+  assert.equal(restored.progress, goal.progress);
+  const other = await featureAccount('termination-other');
+  const isolated = await request('/history/projects?year=2032', { cookie: other.cookie });
+  assert.deepEqual(isolated.body.projects, []);
+  assert.deepEqual(isolated.body.changes, []);
 });

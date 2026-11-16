@@ -19,19 +19,19 @@ import { WorkItemsService, item } from './work-items.service';
 // Every level joins on owner as well as ID. Descendants are attributed by current
 // association, including work scheduled outside the root goal's calendar year.
 const executionTree = `WITH roots AS (
-  SELECT * FROM annual_goals WHERE user_id=$1 AND year=$2 AND deleted_at IS NULL AND archived_at IS NULL
+  SELECT * FROM annual_goals WHERE user_id=$1 AND year=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), months AS (
   SELECT m.*,r.id AS root_id,r.title AS root_title FROM monthly_goals m
   JOIN roots r ON r.id=m.annual_goal_id AND r.user_id=m.user_id
-  WHERE m.deleted_at IS NULL AND m.archived_at IS NULL
+  WHERE m.deleted_at IS NULL AND m.archived_at IS NULL AND NOT m.terminated
 ), weeks AS (
   SELECT w.*,m.root_id,m.root_title FROM weekly_tasks w
   JOIN months m ON m.id=w.monthly_goal_id AND m.user_id=w.user_id
-  WHERE w.deleted_at IS NULL AND w.archived_at IS NULL
+  WHERE w.deleted_at IS NULL AND w.archived_at IS NULL AND NOT w.terminated
 ), days AS (
   SELECT d.*,w.root_id,w.root_title FROM daily_tasks d
   JOIN weeks w ON w.id=d.weekly_task_id AND w.user_id=d.user_id
-  WHERE d.deleted_at IS NULL AND d.archived_at IS NULL
+  WHERE d.deleted_at IS NULL AND d.archived_at IS NULL AND NOT d.terminated
 ), execution AS (
   SELECT id,'monthly' AS type,root_id,root_title,progress=100 AS completed,
     current_month AS period,created_at,to_jsonb(months) AS data FROM months
@@ -45,13 +45,13 @@ const executionTree = `WITH roots AS (
 // weekly/daily breakdown is tested inside the selected interval, not all time.
 const alignmentTree = `WITH a AS (
   SELECT *,annual_progress_value(user_id,id,progress_mode,progress) AS effective_progress
-  FROM annual_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL
+  FROM annual_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), m AS (
-  SELECT * FROM monthly_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL
+  SELECT * FROM monthly_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), w AS (
-  SELECT * FROM weekly_tasks WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL
+  SELECT * FROM weekly_tasks WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), d AS (
-  SELECT * FROM daily_tasks WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL
+  SELECT * FROM daily_tasks WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), scoped AS (
   SELECT id,'annual' AS type,created_at,to_jsonb(a) AS data FROM a WHERE year=$2
   UNION ALL SELECT id,'monthly',created_at,to_jsonb(m) FROM m WHERE current_month=$3::date
@@ -113,7 +113,7 @@ export class InsightsService {
           `SELECT count(*)::int AS total,
           count(*) FILTER (WHERE ${progress}=100)::int AS completed, coalesce(sum(weight),0) AS weight,
           round(sum(${progress}*weight) / nullif(sum(weight),0)) AS value
-          FROM ${source} WHERE user_id=$1 AND ${column}=$2 AND deleted_at IS NULL AND archived_at IS NULL`,
+          FROM ${source} WHERE user_id=$1 AND ${column}=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated`,
           [userId, period],
         );
         const r = result.rows[0];
@@ -131,7 +131,7 @@ export class InsightsService {
         count(*) FILTER (WHERE status='done')::int AS completed,
         round(avg(CASE status WHEN 'todo' THEN 0 WHEN 'doing' THEN 50 WHEN 'block' THEN 15 ELSE 100 END)) AS value
         FROM weekly_tasks WHERE user_id=$1 AND current_start<=$3::date AND current_end>=$2::date
-          AND deleted_at IS NULL AND archived_at IS NULL`,
+          AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated`,
         [userId, q.start, q.end],
       );
       const wr = weeklyRows.rows[0];
@@ -144,7 +144,7 @@ export class InsightsService {
         `SELECT count(*)::int AS total,
         count(*) FILTER (WHERE done)::int AS completed, coalesce(sum(minutes),0)::int AS minutes,
         round(100.0 * count(*) FILTER (WHERE done) / nullif(count(*),0)) AS value
-        FROM daily_tasks WHERE user_id=$1 AND scheduled_date=$2 AND deleted_at IS NULL AND archived_at IS NULL`,
+        FROM daily_tasks WHERE user_id=$1 AND scheduled_date=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated`,
         [userId, q.date],
       );
       const dr = dailyRows.rows[0];
@@ -156,7 +156,7 @@ export class InsightsService {
       };
       const focusRows = await client.query(
         `SELECT * FROM daily_tasks WHERE user_id=$1 AND scheduled_date=$2
-        AND NOT done AND deleted_at IS NULL AND archived_at IS NULL ORDER BY created_at,id LIMIT 1`,
+        AND NOT done AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated ORDER BY created_at,id LIMIT 1`,
         [userId, q.date],
       );
       const focus = focusRows.rows[0] ? item('daily', focusRows.rows[0]) : null;
@@ -185,14 +185,14 @@ export class InsightsService {
       }));
       const monthlyCounts = await client.query(
         `WITH m AS (
-        SELECT id,user_id FROM monthly_goals WHERE user_id=$1 AND current_month=$2::date AND deleted_at IS NULL AND archived_at IS NULL
+        SELECT id,user_id FROM monthly_goals WHERE user_id=$1 AND current_month=$2::date AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
       ), w AS (
         SELECT w.* FROM weekly_tasks w JOIN m ON m.id=w.monthly_goal_id AND m.user_id=w.user_id
-          WHERE w.deleted_at IS NULL AND w.archived_at IS NULL
+          WHERE w.deleted_at IS NULL AND w.archived_at IS NULL AND NOT w.terminated
       ), children AS (
         SELECT id,monthly_goal_id AS root,'weekly' AS type,status='done' AS completed FROM w
         UNION ALL SELECT d.id,w.monthly_goal_id,'daily',d.done FROM daily_tasks d JOIN w ON w.id=d.weekly_task_id AND w.user_id=d.user_id
-          WHERE d.deleted_at IS NULL AND d.archived_at IS NULL
+          WHERE d.deleted_at IS NULL AND d.archived_at IS NULL AND NOT d.terminated
       ) SELECT m.id,count(c.id)::int AS total,count(c.id) FILTER (WHERE c.completed)::int AS completed,
         count(c.id) FILTER (WHERE c.type='weekly')::int AS weekly_total,
         count(c.id) FILTER (WHERE c.type='weekly' AND c.completed)::int AS weekly_completed,

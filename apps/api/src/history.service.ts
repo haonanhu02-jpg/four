@@ -175,7 +175,7 @@ export class HistoryService {
           : 'to_jsonb(t)';
       await client.query(
         `INSERT INTO period_snapshot_items(snapshot_id,user_id,item_type,item_id,title,completed,data)
-        SELECT $1,t.user_id,'${type}',t.id,t.title,${done},jsonb_build_object('record',${record},'ancestors',${ancestors})
+        SELECT $1,t.user_id,'${type}',t.id,t.title,(NOT t.terminated AND (${done})),jsonb_build_object('record',${record},'ancestors',${ancestors})
         FROM ${def.table} t ${joins} WHERE t.user_id=$2 AND t.deleted_at IS NULL AND t.archived_at IS NULL AND ${condition}`,
         [id, userId, p.start, p.end],
       );
@@ -359,6 +359,75 @@ export class HistoryService {
         limit: q.limit,
         offset: q.offset,
       };
+    });
+  }
+  projects(userId: string, q: { year: number; limit: number; offset: number }) {
+    return this.db.withTransaction(async (client) => {
+      await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
+      const baseline = (
+        await client.query(
+          'SELECT payload,recorded_at FROM annual_plan_baselines WHERE user_id=$1 AND year=$2',
+          [userId, q.year],
+        )
+      ).rows[0];
+      const rows = await client.query(
+        `SELECT a.*, (SELECT l.after_value->'item' FROM activity_logs l WHERE l.user_id=a.user_id AND l.item_type='annual' AND l.item_id=a.id AND coalesce(l.after_value->'item'->>'title','')<>'' ORDER BY l.created_at,l.id LIMIT 1) AS initial_record,
+        (SELECT min(l.created_at) FROM activity_logs l WHERE l.user_id=a.user_id AND l.item_type='annual' AND l.item_id=a.id AND coalesce(l.after_value->'item'->>'title','')<>'') AS initial_at
+        FROM annual_goals a WHERE a.user_id=$1 AND (a.year=$2 OR a.id IN (SELECT item_id FROM activity_logs WHERE user_id=$1 AND item_type='annual' AND (before_value->'item'->>'year'=$2::text OR after_value->'item'->>'year'=$2::text))) ORDER BY a.created_at DESC,a.id`,
+        [userId, q.year],
+      );
+      const ids = rows.rows.map((r) => r.id);
+      const total = await client.query(
+        "SELECT count(*)::int AS total FROM activity_logs WHERE user_id=$1 AND item_type='annual' AND item_id=ANY($2::uuid[])",
+        [userId, ids],
+      );
+      const logs = await client.query(
+        "SELECT id,item_id,action,before_value,after_value,created_at FROM activity_logs WHERE user_id=$1 AND item_type='annual' AND item_id=ANY($2::uuid[]) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4",
+        [userId, ids, q.limit, q.offset],
+      );
+      return {
+        baselineAt: baseline ? new Date(baseline.recorded_at).toISOString() : null,
+        projects: rows.rows.map((r) => ({
+          current: item('annual', r),
+          initial: baseline
+            ? ((baseline.payload as WorkItem[]).find((v) => v.id === r.id) ?? null)
+            : (r.initial_record ?? null),
+          initialAt: baseline
+            ? new Date(baseline.recorded_at).toISOString()
+            : r.initial_at
+              ? new Date(r.initial_at).toISOString()
+              : null,
+        })),
+        changes: logs.rows.map((r) => ({
+          id: r.id,
+          itemId: r.item_id,
+          action: r.action,
+          before: r.before_value?.item ?? null,
+          after: r.after_value?.item ?? null,
+          createdAt: new Date(r.created_at).toISOString(),
+        })),
+        total: total.rows[0].total,
+        limit: q.limit,
+        offset: q.offset,
+      };
+    });
+  }
+  baseline(userId: string, year: number) {
+    return this.db.withTransaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+        `work-items:${userId}`,
+      ]);
+      const rows = await client.query(
+        'SELECT * FROM annual_goals WHERE user_id=$1 AND year=$2 AND deleted_at IS NULL AND archived_at IS NULL ORDER BY created_at,id',
+        [userId, year],
+      );
+      if (!rows.rowCount)
+        throw new ApiException('VALIDATION_ERROR', '当前年度没有可记录的目标', 400);
+      await client.query(
+        'INSERT INTO annual_plan_baselines(user_id,year,payload) VALUES ($1,$2,$3) ON CONFLICT (user_id,year) DO NOTHING',
+        [userId, year, JSON.stringify(rows.rows.map((r) => item('annual', r)))],
+      );
+      return { recorded: true };
     });
   }
 }

@@ -51,6 +51,8 @@ export interface BackupList {
 const stamp = z.iso.datetime({ offset: true });
 const id = z.string().min(1).max(100);
 const meta = {
+  terminated: z.boolean().optional(),
+  terminationReason: z.string().max(10000).optional(),
   id,
   note: z.string().max(10000).optional(),
   parentId: id.nullable().optional(),

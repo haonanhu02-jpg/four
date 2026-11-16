@@ -939,3 +939,122 @@
     gap: 5px;
   }
 }
+
+/* State and plan changes use the same light/dark theme tokens. */
+.wb-filter-tabs {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.wb-filter-tabs strong {
+  margin-left: 4px;
+}
+.wb-goals-table th:first-child {
+  width: 25%;
+}
+.wb-goals-table th:nth-child(2) {
+  width: 15%;
+}
+.wb-goals-table th:nth-child(3) {
+  width: 7%;
+}
+.wb-goals-table th:nth-child(4) {
+  width: 13%;
+}
+.wb-goals-table th:nth-child(5) {
+  width: 12%;
+}
+.wb-goals-table th:nth-child(6) {
+  width: 11%;
+}
+.wb-termination-reason {
+  width: 100%;
+  min-width: 0;
+  margin-top: 6px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+.wb-month-sources {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 10px 0;
+}
+.wb-unplanned-months,
+.wb-project-changes {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.wb-unplanned-months > summary,
+.wb-unlinked-days h3 {
+  color: var(--warning);
+  font-weight: 600;
+  cursor: pointer;
+}
+.wb-unplanned-months article {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+}
+.wb-unplanned-months article > div {
+  flex: 1;
+  min-width: 180px;
+}
+.wb-unplanned-months p,
+.wb-project-comparison p {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.wb-project-comparison {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.wb-project-comparison summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.wb-project-comparison summary span {
+  color: var(--link);
+  margin-left: 8px;
+  font-size: 12px;
+}
+.wb-project-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 12px 0;
+}
+.wb-project-log {
+  padding-left: 20px;
+  font-size: 12px;
+}
+.wb-project-log li {
+  padding: 8px 0;
+  overflow-wrap: anywhere;
+}
+.wb-project-pages {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.is-terminated {
+  border-left: 3px solid var(--warning);
+}
+@media (max-width: 640px) {
+  .wb-project-columns {
+    grid-template-columns: 1fr;
+  }
+  .wb-project-changes .wb-section-header {
+    flex-wrap: wrap;
+  }
+}

@@ -16,6 +16,8 @@ const progress = z.number().min(0).max(100);
 const weight = z.number().min(0).max(100);
 const annual = z
   .object({
+    terminated: z.boolean().optional(),
+    terminationReason: note.optional(),
     title: text,
     note,
     year: z.number().int().min(1970).max(9999),
@@ -27,6 +29,8 @@ const annual = z
   .strict();
 const monthly = z
   .object({
+    terminated: z.boolean().optional(),
+    terminationReason: note.optional(),
     title: text,
     note,
     month: monthSchema,
@@ -38,6 +42,8 @@ const monthly = z
   .strict();
 const weekly = z
   .object({
+    terminated: z.boolean().optional(),
+    terminationReason: note.optional(),
     title: text,
     note,
     startDate: businessDateSchema,
@@ -49,6 +55,8 @@ const weekly = z
   .strict();
 const daily = z
   .object({
+    terminated: z.boolean().optional(),
+    terminationReason: note.optional(),
     title: text,
     note: note.optional(),
     time: z.string().max(100, '时间最多 100 字').optional(),
@@ -98,6 +106,8 @@ export const workbenchQuerySchema = z
 export type WorkItemQuery = z.infer<typeof workItemQuerySchema>;
 export type WorkbenchQuery = z.infer<typeof workbenchQuerySchema>;
 export interface WorkItemValues {
+  terminated?: boolean;
+  terminationReason?: string;
   title?: string;
   note?: string;
   year?: number;

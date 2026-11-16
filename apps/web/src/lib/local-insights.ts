@@ -33,7 +33,7 @@ const weighted = (rows: WorkItem[], all: WorkItem[] = rows): Metric => {
   };
 };
 export function localInsights(records: WorkItem[], q: WorkbenchQuery, today: string) {
-  const all = records.filter((v) => !v.deletedAt && !v.archivedAt),
+  const all = records.filter((v) => !v.deletedAt && !v.archivedAt && !v.terminated),
     map = new Map(all.map((v) => [v.id, v]));
   const ancestors = (v: WorkItem) => {
     const chain: WorkItem[] = [];

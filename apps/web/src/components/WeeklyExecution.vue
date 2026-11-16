@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { activeItem, type WorkItem, type WorkItemType } from '@workbench/contracts';
+import { itemComplete, itemState, type WorkItem, type WorkItemType } from '@workbench/contracts';
 import { useWorkbenchStore } from '../stores/workbench';
 import { dayLabel } from '../lib/dates';
 import WorkItemCard from './WorkItemCard.vue';
@@ -14,7 +14,34 @@ const emit = defineEmits<{
 const board = useWorkbenchStore();
 const opened = ref<Record<string, boolean>>({});
 const limit = ref(50);
-const all = computed(() => Object.values(board.records).filter(activeItem).sort(newestFirst));
+const all = computed(() =>
+  Object.values(board.records)
+    .filter((v) => !v.deletedAt && !v.archivedAt)
+    .sort(newestFirst),
+);
+const weekFilter = ref('all');
+const weekStates = {
+  all: '全部',
+  incomplete: '未完成',
+  doing: '进行中',
+  complete: '已完成',
+  todo: '未开始',
+  terminated: '已终止',
+};
+const monthGoals = computed(() =>
+  all.value.filter(
+    (v) =>
+      v.type === 'monthly' &&
+      !v.terminated &&
+      !itemComplete(v, all.value) &&
+      (v.month === board.selection.month ||
+        (v.month! >= board.selection.start.slice(0, 7) &&
+          v.month! <= board.selection.end.slice(0, 7))),
+  ),
+);
+const unplannedMonths = computed(() =>
+  monthGoals.value.filter((m) => !weeks.value.some((w) => w.parentId === m.id && !w.terminated)),
+);
 const weeks = computed(() =>
   all.value.filter(
     (v) =>
@@ -33,7 +60,19 @@ const extraWeeks = computed(() => {
   const selected = new Set(weeks.value.map((v) => v.id));
   return all.value.filter((v) => v.type === 'weekly' && ids.has(v.id) && !selected.has(v.id));
 });
-const displayedWeeks = computed(() => [...weeks.value, ...extraWeeks.value]);
+const weekCandidates = computed(() =>
+  [...weeks.value, ...extraWeeks.value].sort(
+    (a, b) =>
+      (a.terminated ? 2 : itemComplete(a) ? 1 : 0) - (b.terminated ? 2 : itemComplete(b) ? 1 : 0) ||
+      newestFirst(a, b),
+  ),
+);
+const weekMatches = (v: WorkItem, key: string) =>
+  key === 'all' ||
+  (key === 'incomplete' ? !v.terminated && !itemComplete(v) : itemState(v) === key);
+const displayedWeeks = computed(() =>
+  weekCandidates.value.filter((v) => weekMatches(v, weekFilter.value)),
+);
 const orphans = computed(() =>
   days.value.filter(
     (d) =>
@@ -47,14 +86,17 @@ const children = (id: string) =>
 watch(
   [days, weeks, () => board.selection.date],
   () => {
-    for (const id of [...displayedWeeks.value.map((v) => v.id), 'unlinked'])
+    for (const id of displayedWeeks.value.map((v) => v.id))
       if (opened.value[id] === undefined && children(id).length)
         opened.value[id] = children(id).some((d) => d.date === board.selection.date && !d.done);
   },
   { immediate: true },
 );
 const isOpen = (id: string) =>
-  opened.value[id] ?? children(id).some((d) => d.date === board.selection.date && !d.done);
+  opened.value[id] ??
+  (id === 'unlinked'
+    ? false
+    : children(id).some((d) => d.date === board.selection.date && !d.done && !d.terminated));
 const allOpen = computed(
   () =>
     displayedWeeks.value.every((w) => isOpen(w.id)) &&
@@ -120,6 +162,21 @@ watch(
         + 新增当日待办
       </button>
     </header>
+    <div class="wb-filter-tabs" aria-label="周任务状态筛选">
+      <button
+        v-for="(label, key) in weekStates"
+        :key="key"
+        type="button"
+        :aria-pressed="weekFilter === key"
+        @click="weekFilter = key"
+      >
+        {{ label }} <strong>{{ weekCandidates.filter((v) => weekMatches(v, key)).length }}</strong>
+      </button>
+    </div>
+    <p class="wb-month-sources">
+      本期月目标 {{ monthGoals.length }} 项，已安排本周任务
+      {{ monthGoals.length - unplannedMonths.length }} 项；未安排的目标列在下方，可直接拆周任务。
+    </p>
     <div v-if="!displayedWeeks.length && !orphans.length && !board.loading" class="wb-empty">
       <span class="wb-empty-symbol">周</span>
       <h3>让月度目标有具体的推进动作</h3>
@@ -212,7 +269,7 @@ watch(
     <article v-if="orphans.length" class="wb-unlinked-days">
       <header class="wb-section-header">
         <div>
-          <h3>未关联周任务的每日工作</h3>
+          <h3>未挂周任务的待办 {{ orphans.length }} 条</h3>
           <p>所选区间内 {{ orphans.length }} 条，可通过“周任务”选择器补充关联。</p>
         </div>
         <button
@@ -221,7 +278,11 @@ watch(
           :aria-expanded="isOpen('unlinked')"
           @click="opened.unlinked = !isOpen('unlinked')"
         >
-          {{ isOpen('unlinked') ? '收起' : '展开' }}
+          {{ isOpen('unlinked') ? '▾' : '▸' }} {{ orphans.length }} 条 · 今日剩
+          {{
+            orphans.filter((d) => d.date === board.selection.date && !d.done && !d.terminated)
+              .length
+          }}
         </button>
       </header>
       <div v-if="isOpen('unlinked')">
@@ -237,5 +298,18 @@ watch(
         />
       </div>
     </article>
+    <details v-if="unplannedMonths.length" class="wb-unplanned-months">
+      <summary>本周未安排周任务的月目标 {{ unplannedMonths.length }} 项</summary>
+      <article v-for="goal in unplannedMonths" :key="goal.id" :data-unplanned-month="goal.id">
+        <div>
+          <strong>{{ goal.title || '未命名月目标' }}</strong>
+          <p>{{ goal.month }} · {{ goal.note || '尚未填写交付物' }}</p>
+        </div>
+        <button type="button" class="wb-link" @click="emit('open', goal)">查看月目标</button
+        ><button type="button" class="wb-button" @click="emit('add', 'weekly', goal.id)">
+          + 安排本周任务
+        </button>
+      </article>
+    </details>
   </section>
 </template>

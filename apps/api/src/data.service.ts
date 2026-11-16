@@ -113,12 +113,15 @@ export class DataService {
         [userId, mode, parsed.document, revision, restoreIds],
       );
       const pastItems = [
-        ...parsed.document.items.daily.filter((v) => !v.done && !v.deletedAt && v.date! < today),
+        ...parsed.document.items.daily.filter(
+          (v) => !v.done && !v.deletedAt && !v.terminated && v.date! < today,
+        ),
         ...parsed.document.items.weekly.filter(
-          (v) => v.status !== 'done' && !v.deletedAt && v.endDate! < today,
+          (v) => v.status !== 'done' && !v.deletedAt && !v.terminated && v.endDate! < today,
         ),
         ...parsed.document.items.monthly.filter(
-          (v) => v.progress !== 100 && !v.deletedAt && v.month! < today.slice(0, 7),
+          (v) =>
+            v.progress !== 100 && !v.deletedAt && !v.terminated && v.month! < today.slice(0, 7),
         ),
       ].length;
       return {
@@ -180,6 +183,8 @@ export class DataService {
           id,
           user_id: userId,
           title: value.title,
+          terminated: value.terminated ?? false,
+          termination_reason: value.terminationReason ?? '',
           deleted_at: value.deletedAt,
           archived_at: value.archivedAt ?? null,
         };

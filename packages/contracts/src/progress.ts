@@ -1,10 +1,12 @@
 import type { WorkItem } from './work-items';
 
-export const activeItem = (item: WorkItem) => !item.deletedAt && !item.archivedAt;
+export const activeItem = (item: WorkItem) =>
+  !item.deletedAt && !item.archivedAt && !item.terminated;
 export function weightedProgress(
   items: WorkItem[],
   value = (item: WorkItem) => item.progress ?? 0,
 ): number | null {
+  items = items.filter((item) => !item.terminated);
   const weight = items.reduce((sum, item) => sum + (item.weight ?? 0), 0);
   return weight > 0
     ? Math.round(items.reduce((sum, item) => sum + value(item) * (item.weight ?? 0), 0) / weight)
@@ -31,7 +33,15 @@ export function effectiveProgress(item: WorkItem, records: WorkItem[]): number {
   return item.progress ?? 0;
 }
 export function itemComplete(item: WorkItem, records: WorkItem[] = []): boolean {
-  return effectiveProgress(item, records) === 100;
+  return !item.terminated && effectiveProgress(item, records) === 100;
+}
+export function itemState(
+  item: WorkItem,
+  records: WorkItem[] = [],
+): 'terminated' | 'complete' | 'todo' | 'doing' {
+  if (item.terminated) return 'terminated';
+  const value = effectiveProgress(item, records);
+  return value === 100 ? 'complete' : value === 0 ? 'todo' : 'doing';
 }
 // Free text is retained verbatim. Parsed durations are supplementary and never
 // overwrite a user's separately entered estimated minutes.

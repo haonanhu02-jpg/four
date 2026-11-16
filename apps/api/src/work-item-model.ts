@@ -25,6 +25,8 @@ export function item(type: WorkItemType, row: Row): WorkItem {
     id: String(row.id),
     type,
     title: String(row.title),
+    terminated: Boolean(row.terminated),
+    terminationReason: String(row.termination_reason ?? ''),
     note: String(row.note ?? ''),
     parentId: definition.parentColumn ? (row[definition.parentColumn] as string | null) : null,
     version: Number(row.version),

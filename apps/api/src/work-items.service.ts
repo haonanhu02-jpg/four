@@ -188,6 +188,8 @@ export class WorkItemsService {
   private columns(type: WorkItemType, values: WorkItemValues): Record<string, unknown> {
     const map: Record<string, string> = {
       title: 'title',
+      terminated: 'terminated',
+      terminationReason: 'termination_reason',
       note: 'note',
       year: 'year',
       progress: 'progress',

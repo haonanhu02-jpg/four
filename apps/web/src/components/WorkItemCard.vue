@@ -49,12 +49,14 @@ const childName = computed(
   () =>
     ({ monthly: '月目标', weekly: '周任务', daily: '日待办', annual: '' })[child.value ?? 'annual'],
 );
-const completed = computed(() =>
-  props.item.type === 'daily'
-    ? props.item.done
-    : props.item.type === 'weekly'
-      ? props.item.status === 'done'
-      : progress.value === 100,
+const completed = computed(
+  () =>
+    !props.item.terminated &&
+    (props.item.type === 'daily'
+      ? props.item.done
+      : props.item.type === 'weekly'
+        ? props.item.status === 'done'
+        : progress.value === 100),
 );
 function text(field: keyof WorkItemValues, event: Event) {
   store.edit(props.item, { [field]: (event.target as HTMLInputElement).value } as WorkItemValues);
@@ -78,12 +80,24 @@ function addSibling() {
     :class="[
       `wb-item-${item.type}`,
       { 'wb-daily-compact': compact },
-      { 'is-complete': completed, 'has-conflict': entry?.state === 'conflict' },
+      {
+        'is-complete': completed,
+        'is-terminated': item.terminated,
+        'has-conflict': entry?.state === 'conflict',
+      },
     ]"
     :data-item-id="item.id"
     :data-type="item.type"
   >
     <div class="wb-item-heading">
+      <button
+        type="button"
+        class="wb-link"
+        :aria-label="`${item.terminated ? '恢复' : '终止'}${name}`"
+        @click="change('terminated', !item.terminated)"
+      >
+        {{ item.terminated ? '已终止 · 恢复' : '终止' }}
+      </button>
       <input
         v-if="item.type === 'daily'"
         class="wb-checkbox"
@@ -116,6 +130,14 @@ function addSibling() {
         ×
       </button>
     </div>
+    <label v-if="item.terminated" class="wb-field"
+      >终止原因<input
+        :value="item.terminationReason ?? ''"
+        aria-label="终止原因"
+        maxlength="10000"
+        @input="text('terminationReason', $event)"
+        @blur="store.save(item.id)"
+    /></label>
     <textarea
       v-if="item.type !== 'daily'"
       class="wb-note-input"
@@ -220,15 +242,26 @@ function addSibling() {
         </div>
         <div class="wb-field">
           状态<ChoicePicker
-            :model-value="item.status ?? 'todo'"
+            :model-value="item.terminated ? 'terminated' : (item.status ?? 'todo')"
             label="周任务状态"
             :options="[
               { value: 'todo', label: '未开始' },
               { value: 'doing', label: '进行中' },
               { value: 'block', label: '受阻' },
               { value: 'done', label: '已完成' },
+              { value: 'terminated', label: '已终止' },
             ]"
-            @update:model-value="(v) => change('status', v)"
+            @update:model-value="
+              (v) => {
+                store.edit(
+                  item,
+                  v === 'terminated'
+                    ? { terminated: true }
+                    : { terminated: false, status: v as WorkItemValues['status'] },
+                );
+                void store.save(item.id);
+              }
+            "
           />
         </div>
         <label class="wb-field"
