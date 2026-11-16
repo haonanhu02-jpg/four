@@ -102,6 +102,14 @@ try {
     await wait(`!!document.querySelector(${JSON.stringify(selector)})`, selector);
     await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   };
+  const reloadPage = async () => {
+    await evaluate('window.__viewReloadPending=true');
+    await call('Page.reload');
+    await wait(
+      '!window.__viewReloadPending&&!!document.querySelector(".workbench")&&!document.querySelector(".wb-loading")',
+      'new document and view initialized',
+    );
+  };
   const clickText = async (text) => {
     const expression = `[...document.querySelectorAll('button')].find(e=>e.textContent.trim()===${JSON.stringify(text)}&&!e.disabled)`;
     await wait(`!!(${expression})`, text);
@@ -264,7 +272,7 @@ try {
       'new goal focused',
     );
     await wait('!board.hasUnpersisted', 'new goal persisted');
-    await call('Page.reload');
+    await reloadPage();
     await wait(
       '!!document.querySelector(".workbench")&&!document.querySelector(".wb-loading")',
       'new order after reload',
@@ -435,7 +443,7 @@ try {
   }
   await view('weekly');
   await wait('!board.hasUnpersisted', 'persist before reload');
-  await call('Page.reload');
+  await reloadPage();
   await wait(
     '!!document.querySelector(".workbench")&&!document.querySelector(".wb-loading")',
     'reloaded',

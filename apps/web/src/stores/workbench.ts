@@ -427,6 +427,8 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     }
   }
   async function initialize(id: string, timezone: string) {
+    // Keep the UI in its loading state until saved view and account data agree.
+    loading.value = true;
     await writes;
     clearTimeout(timer);
     userId.value = id;

@@ -324,6 +324,7 @@ const children = (item: WorkItem) =>
       <template v-else-if="weightState === 'balanced'">已配平 100%，加权进度口径正常。</template>
       <template v-else>尚差 {{ weightDifference }}%，请继续分配权重。</template>
       <small v-if="weightState !== 'balanced'">进度仍按实际权重归一计算。</small>
+      <small v-if="goals.some((v) => v.terminated)">已终止项不计入权重与进度；下级事项保留。</small>
     </p>
     <button v-if="rows.length > limit" type="button" class="wb-load-more" @click="limit += 50">
       加载更多（{{ limit }}/{{ rows.length }}）
