@@ -336,6 +336,30 @@
   padding: 7px 10px;
   color: var(--link);
   font-size: 12px;
+  flex-wrap: wrap;
+}
+.wb-days-remaining {
+  color: var(--warning);
+  font-weight: 600;
+}
+.wb-month-planning-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 8px 0;
+}
+.wb-unlinked-days {
+  margin-top: 14px;
+}
+.wb-unlinked-days > .wb-section-header {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.wb-unlinked-days > .wb-section-header > div {
+  flex: 1 1 260px;
+}
+.wb-unlinked-toggle {
+  margin-left: auto;
+  white-space: nowrap;
 }
 .wb-embedded-days {
   border-top: 1px solid var(--border);

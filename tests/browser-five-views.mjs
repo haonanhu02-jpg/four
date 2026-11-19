@@ -120,8 +120,17 @@ try {
       `(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`,
     );
   };
-  const shot = async (name) => {
-    const r = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+  const shot = async (name, selector) => {
+    const clip = selector
+      ? await evaluate(
+          `(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1};})()`,
+        )
+      : undefined;
+    const r = await call('Page.captureScreenshot', {
+      format: 'png',
+      captureBeyondViewport: true,
+      ...(clip ? { clip } : {}),
+    });
     await fs.writeFile(path.join(output, name + '.png'), Buffer.from(r.data, 'base64'));
   };
   const view = async (name) => {
@@ -484,6 +493,11 @@ try {
   await click(`[data-item-id="${goal.id}"] [aria-label="年度进度模式"]`);
   await clickText('月目标自动汇总');
   await view('weekly');
+  const weeklyTotal = () =>
+    evaluate(
+      'Object.values(board.records).filter(v=>v.type==="weekly"&&!v.deletedAt&&!v.archivedAt).length',
+    );
+  const initialWeekCount = await weeklyTotal();
   const month = await evaluate(
     'board.add("monthly",undefined,{title:"待排本周的月目标"}).then(v=>v.id)',
   );
@@ -491,29 +505,136 @@ try {
     `!!document.querySelector('[data-unplanned-month="${month}"]')`,
     'monthly goal automatically in week view',
   );
-  const plannedWeek = await evaluate(
-    `board.add('weekly',${JSON.stringify(month)},{title:'为月目标安排本周'}).then(v=>v.id)`,
+  assert.ok(
+    await evaluate(
+      `document.querySelector('[data-unplanned-month="${month}"]').getClientRects().length>0`,
+    ),
+    'unplanned monthly goal is expanded by default',
   );
+  assert.equal(
+    await weeklyTotal(),
+    initialWeekCount,
+    'showing monthly reminders does not create weekly records',
+  );
+  await click(`[data-unplanned-month="${month}"] .wb-button`);
   await wait(
     `!document.querySelector('[data-unplanned-month="${month}"]')`,
     'scheduled monthly goal leaves reminder',
   );
+  const plannedWeek = await evaluate(
+    `Object.values(board.records).find(v=>v.type==='weekly'&&v.parentId==='${month}'&&!v.deletedAt).id`,
+  );
+  assert.equal(await weeklyTotal(), initialWeekCount + 1);
+  await input(`[data-item-id="${plannedWeek}"] [aria-label="周任务标题"]`, '为月目标安排本周');
+  await view('monthly');
+  await view('weekly');
+  assert.equal(
+    await weeklyTotal(),
+    initialWeekCount + 1,
+    'revisiting weekly view does not create duplicates',
+  );
+  const pendingMonth = await evaluate(
+    'board.add("monthly",undefined,{title:"仍待安排的月目标"}).then(v=>v.id)',
+  );
+  const orphans = await evaluate(`(async()=>{
+    const ids=[];
+    for(const [title,done] of [['未挂周任务验证一',false],['未挂周任务验证二',false],['已完成的未挂待办',true]])
+      ids.push((await board.add('daily',undefined,{parentId:null,title,done})).id);
+    return ids;
+  })()`);
+  await wait(
+    'document.querySelector(".wb-unlinked-days h3")?.textContent.includes("未挂周任务的待办 3 条")',
+    'three orphan daily tasks counted',
+  );
+  assert.ok(
+    await evaluate(
+      'document.querySelector(".wb-weekly-execution").lastElementChild.classList.contains("wb-unlinked-days")',
+    ),
+    'unlinked daily tasks stay at the bottom after monthly reminders',
+  );
+  assert.equal(
+    await evaluate('document.querySelector(".wb-unlinked-toggle").getAttribute("aria-expanded")'),
+    'false',
+  );
+  assert.ok(
+    await evaluate(
+      'document.querySelector(".wb-unlinked-toggle").textContent.includes("今日剩 2")',
+    ),
+  );
+  await shot('weekly-unlinked-three-collapsed', '.wb-unlinked-days');
+  await shot('weekly-unplanned-months', '.wb-unplanned-months');
+  await click('[aria-label="展开未挂周任务的待办"]');
+  await wait(
+    'document.querySelectorAll(".wb-unlinked-days .wb-daily-compact").length===3',
+    'all three orphan contents expand',
+  );
+  for (const [i, title] of ['未挂周任务验证一', '未挂周任务验证二', '已完成的未挂待办'].entries())
+    assert.equal(
+      await evaluate(
+        `document.querySelector('.wb-unlinked-days [data-title-id="${orphans[i]}"]').value`,
+      ),
+      title,
+    );
+  await shot('weekly-unlinked-three-expanded', '.wb-unlinked-days');
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 390,
+    height: 844,
+    deviceScaleFactor: 1,
+    mobile: true,
+  });
+  for (const color of ['light', 'dark']) {
+    await theme(color);
+    assert.ok(
+      await evaluate('document.documentElement.scrollWidth<=390'),
+      'expanded orphan panel fits mobile width',
+    );
+    await shot(`weekly-unlinked-expanded-${color}-390`, '.wb-unlinked-days');
+  }
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 1440,
+    height: 1000,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await theme('light');
+  await click(`.wb-unlinked-days [data-item-id="${orphans[0]}"] [aria-label="关联周任务"]`);
+  const weekOption = `[...document.querySelectorAll('.wb-unlinked-days [data-item-id="${orphans[0]}"] .wb-option-list button')].find(e=>e.querySelector('span')?.textContent==='为月目标安排本周')`;
+  await wait(`!!(${weekOption})`, 'weekly parent option available');
+  await evaluate(`(${weekOption}).click()`);
+  await wait(
+    `board.records['${orphans[0]}'].parentId==='${plannedWeek}'&&document.querySelector('.wb-unlinked-days h3').textContent.includes('2 条')`,
+    'linking a daily task updates orphan count',
+  );
+  assert.ok(
+    await evaluate(
+      'document.querySelector(".wb-unlinked-toggle").textContent.includes("今日剩 1")',
+    ),
+  );
+  await click(`.wb-unlinked-days [data-item-id="${orphans[1]}"] input[type="checkbox"]`);
+  await wait(
+    'document.querySelector(".wb-unlinked-toggle").textContent.includes("今日剩 0")',
+    'completing a task updates remaining count',
+  );
+  await wait('!board.hasUnpersisted', 'weekly planning and links persisted');
+  await reloadPage();
   await evaluate(
-    `board.remove(board.records[${JSON.stringify(plannedWeek)}]).then(()=>board.remove(board.records[${JSON.stringify(month)}]))`,
+    'window.board=document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench");true',
   );
-  const orphan = await evaluate(
-    'board.add("daily",undefined,{parentId:null,title:"未挂周任务验证"}).then(v=>v.id)',
+  assert.equal(await weeklyTotal(), initialWeekCount + 1);
+  assert.equal(await evaluate(`board.records['${orphans[0]}'].parentId`), plannedWeek);
+  assert.ok(
+    await evaluate('document.querySelector(".wb-unlinked-days h3").textContent.includes("2 条")'),
   );
-  await wait(
-    'document.querySelector(".wb-unlinked-days h3")?.textContent.includes("未挂周任务的待办 1 条")',
-    'orphan count',
-  );
-  await click('.wb-unlinked-days button');
-  await wait(
-    `!!document.querySelector('.wb-unlinked-days [data-item-id="${orphan}"]')`,
-    'orphan expands',
-  );
-  await evaluate(`board.remove(board.records[${JSON.stringify(orphan)}])`);
+  await evaluate(`(async()=>{
+    for(const id of ${JSON.stringify(orphans)})await board.remove(board.records[id]);
+    for(const id of ${JSON.stringify([plannedWeek, month, pendingMonth])})await board.remove(board.records[id]);
+  })()`);
+  if (
+    !(await evaluate(
+      '[...document.querySelectorAll("button")].some(e=>e.textContent.trim()==="全部收起")',
+    ))
+  )
+    await clickText('全部展开');
   await clickText('全部收起');
   assert.equal(await evaluate('document.querySelectorAll(".wb-embedded-days").length'), 0);
   await clickText('全部展开');
