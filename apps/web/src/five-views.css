@@ -1059,33 +1059,57 @@
   }
 }
 
-/* Compact workspace chrome keeps the goal list near the top of the page. */
+/* Annual goals keep editing controls with the data they affect. */
 .wb-goals-table.is-annual th:nth-child(1) {
-  width: 22%;
+  width: 30%;
 }
 .wb-goals-table.is-annual th:nth-child(2) {
-  width: 12%;
+  width: 9%;
 }
 .wb-goals-table.is-annual th:nth-child(3) {
-  width: 7%;
+  width: 13%;
 }
 .wb-goals-table.is-annual th:nth-child(4) {
-  width: 11%;
+  width: 14%;
 }
 .wb-goals-table.is-annual th:nth-child(5) {
-  width: 10%;
+  width: 9%;
 }
 .wb-goals-table.is-annual th:nth-child(6) {
-  width: 8%;
+  width: 15%;
 }
 .wb-goals-table.is-annual th:nth-child(7) {
   width: 10%;
 }
-.wb-goals-table.is-annual th:nth-child(8) {
-  width: 9%;
+.is-annual .wb-goal-title-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
 }
-.wb-goals-table.is-annual th:nth-child(9) {
-  width: 11%;
+.is-annual .wb-annual-row-actions {
+  margin: 0;
+  gap: 10px;
+}
+.wb-progress-mode .wb-choice-trigger {
+  font-size: 11px;
+  gap: 6px;
+  padding: 0;
+}
+.is-annual .wb-table-progress {
+  gap: 5px;
+}
+.is-annual .wb-table-progress small {
+  white-space: nowrap;
+}
+.is-annual .wb-table-number input {
+  appearance: textfield;
+}
+.is-annual .wb-table-number input::-webkit-inner-spin-button,
+.is-annual .wb-table-number input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
 }
 .wb-month-progress {
   color: var(--link);
@@ -1141,6 +1165,16 @@
   font-size: 11px;
   line-height: 1.6;
 }
+@media (max-width: 850px) {
+  .wb-goals-table.is-annual td:last-child {
+    grid-column: auto;
+  }
+  .is-annual .wb-goal-title-footer {
+    margin-top: 4px;
+  }
+}
+
+/* Compact workspace chrome keeps the goal list near the top of the page. */
 .has-workspace .site-header {
   height: auto;
   min-height: 64px;

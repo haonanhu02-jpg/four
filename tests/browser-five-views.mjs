@@ -307,6 +307,23 @@ try {
   const summaryRow = `[data-item-id="${summaryGoal}"]`;
   await wait(`!!document.querySelector('${summaryRow}')`, 'summary test goal');
   assert.equal(
+    await evaluate('document.querySelectorAll(".wb-goals-table.is-annual thead th").length'),
+    7,
+    'annual actions and progress mode share existing columns',
+  );
+  assert.ok(
+    await evaluate(
+      `!!document.querySelector('${summaryRow} .wb-table-title [aria-label="删除年度目标"]')`,
+    ),
+    'annual actions are grouped beside the title',
+  );
+  assert.ok(
+    await evaluate(
+      `!!document.querySelector('${summaryRow} .wb-table-progress [aria-label="年度进度模式"]')`,
+    ),
+    'progress mode is grouped with annual progress',
+  );
+  assert.equal(
     await evaluate(
       `document.querySelector('[data-month-progress="${summaryGoal}"] strong').textContent`,
     ),
@@ -367,9 +384,12 @@ try {
     '30%',
   );
   for (const label of ['已完成 1 项月目标', '未完成 2 项月目标', '已终止 1 项月目标'])
-    assert.ok(
-      await evaluate(`!!document.querySelector('${completionSelector} [aria-label="${label}"]')`),
-      label,
+    assert.equal(
+      await evaluate(
+        `document.querySelector('${completionSelector} [aria-label="${label}"]').textContent.trim()`,
+      ),
+      label.replace('月目标', ''),
+      'Monthly counts use explicit visible labels: ' + label,
     );
   await evaluate(`board.edit(board.records['${summaryMonths[1]}'],{progress:100})`);
   await wait(
@@ -545,7 +565,7 @@ try {
     'current-period daily item remains visible',
   );
   const layouts = [];
-  for (const width of [1440, 390]) {
+  for (const width of [1440, 1024, 390]) {
     await call('Emulation.setDeviceMetricsOverride', {
       width,
       height: width === 390 ? 844 : 1000,
@@ -565,6 +585,14 @@ try {
           `Horizontal overflow ${JSON.stringify(layouts.at(-1))}`,
         );
         assert.equal(size.inner, width, 'Viewport expanded to fit overflowing content');
+        if (name === 'annual' && width >= 1024) {
+          const overflowingControls = await evaluate(`
+            [...document.querySelectorAll('.wb-goals-table.is-annual td input, .wb-goals-table.is-annual td .wb-choice-trigger, .wb-month-counts > span')]
+              .filter(e=>{const r=e.getBoundingClientRect(),c=e.closest('td').getBoundingClientRect();return r.left<c.left-1||r.right>c.right+1;})
+              .map(e=>e.getAttribute('aria-label')||e.textContent.trim())
+          `);
+          assert.deepEqual(overflowingControls, [], 'Annual controls fit their columns');
+        }
         await shot(`${name}-${color}-${width}`);
       }
     }

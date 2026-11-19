@@ -187,16 +187,18 @@ function changeState(item: WorkItem, value: string) {
       <thead>
         <tr>
           <th scope="col">目标 / 衡量标准</th>
-          <th scope="col">{{ type === 'annual' ? '进度模式' : '年度来源' }}</th>
+          <th v-if="type === 'monthly'" scope="col">年度来源</th>
           <th scope="col">权重</th>
           <th scope="col">{{ type === 'annual' ? '预计完成' : '截止日期' }}</th>
           <th scope="col">{{ type === 'annual' ? '年度进度' : '进度' }}</th>
           <th v-if="type === 'annual'" scope="col">
             本月进度<small class="wb-month-context">{{ board.selection.month }}</small>
           </th>
-          <th v-if="type === 'annual'" scope="col">月度完成</th>
+          <th v-if="type === 'annual'" scope="col">
+            月度完成<small class="wb-month-context">全部关联月份</small>
+          </th>
           <th scope="col">状态</th>
-          <th scope="col">拆解与操作</th>
+          <th v-if="type === 'monthly'" scope="col">拆解与操作</th>
         </tr>
       </thead>
       <tbody>
@@ -229,38 +231,42 @@ function changeState(item: WorkItem, value: string) {
               @input="edit(item, 'note', $event)"
               @blur="board.save(item.id)"
             />
-            <small class="wb-table-save" :class="board.entries[item.id]?.state">{{
-              board.entries[item.id]?.state === 'conflict'
-                ? '需要处理版本冲突'
-                : board.entries[item.id]?.state === 'error'
-                  ? '保存失败，草稿已保留'
-                  : board.entries[item.id]?.state
-                    ? '本机已保存 · 待同步'
-                    : '✓ 已保存'
-            }}</small>
-            <button
-              v-if="['conflict', 'error'].includes(board.entries[item.id]?.state ?? '')"
-              class="wb-link"
-              type="button"
-              @click="emit('open', item)"
-            >
-              查看并处理草稿
-            </button>
+            <div class="wb-goal-title-footer">
+              <small class="wb-table-save" :class="board.entries[item.id]?.state">{{
+                board.entries[item.id]?.state === 'conflict'
+                  ? '需要处理版本冲突'
+                  : board.entries[item.id]?.state === 'error'
+                    ? '保存失败，草稿已保留'
+                    : board.entries[item.id]?.state
+                      ? '本机已保存 · 待同步'
+                      : '✓ 已保存'
+              }}</small>
+              <button
+                v-if="['conflict', 'error'].includes(board.entries[item.id]?.state ?? '')"
+                class="wb-link"
+                type="button"
+                @click="emit('open', item)"
+              >
+                查看并处理草稿
+              </button>
+              <div v-if="type === 'annual'" class="wb-table-row-actions wb-annual-row-actions">
+                <button type="button" class="wb-link" @click="emit('add', 'monthly', item.id)">
+                  + 拆月目标
+                </button>
+                <button type="button" class="wb-link" @click="emit('open', item)">详情</button>
+                <button
+                  type="button"
+                  class="wb-delete"
+                  aria-label="删除年度目标"
+                  @click="emit('remove', item)"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
           </td>
-          <td :data-label="type === 'annual' ? '进度模式' : '年度来源'">
-            <ChoicePicker
-              v-if="type === 'annual'"
-              :model-value="item.progressMode ?? 'manual'"
-              label="年度进度模式"
-              :options="[
-                { value: 'manual', label: '手动填写' },
-                { value: 'auto', label: '月目标自动汇总' },
-              ]"
-              @update:model-value="
-                (v) => board.edit(item, { progressMode: v as 'manual' | 'auto' })
-              "
-            />
-            <ParentPicker v-else :item="item" />
+          <td v-if="type === 'monthly'" data-label="年度来源">
+            <ParentPicker :item="item" />
           </td>
           <td data-label="权重">
             <label class="wb-table-number"
@@ -306,12 +312,31 @@ function changeState(item: WorkItem, value: string) {
               <div class="wb-progress-track">
                 <span :style="{ width: `${effectiveProgress(item, all)}%` }" />
               </div>
-              <small v-if="item.progressMode === 'auto'"
-                >自动 · 手动值 {{ item.progress }}% 保留</small
+              <ChoicePicker
+                v-if="type === 'annual'"
+                class="wb-progress-mode"
+                :model-value="item.progressMode ?? 'manual'"
+                label="年度进度模式"
+                :options="[
+                  { value: 'manual', label: '手动填写' },
+                  { value: 'auto', label: '月目标自动汇总' },
+                ]"
+                @update:model-value="
+                  (v) => board.edit(item, { progressMode: v as 'manual' | 'auto' })
+                "
+              />
+              <small
+                v-if="item.progressMode === 'auto'"
+                :title="`切换回手动模式可继续使用已保留的 ${item.progress}% 进度`"
+                >手动值 {{ item.progress }}% 已保留</small
               >
             </div>
           </td>
-          <td v-if="type === 'annual'" data-label="本月进度" :data-month-progress="item.id">
+          <td
+            v-if="type === 'annual'"
+            :data-label="`本月进度（${board.selection.month}）`"
+            :data-month-progress="item.id"
+          >
             <strong
               class="wb-month-progress"
               :title="`${board.selection.month} 月目标按权重汇总；已终止项不计入`"
@@ -321,28 +346,33 @@ function changeState(item: WorkItem, value: string) {
                   : `${monthSummaries.get(item.id)!.progress}%`
               }}</strong
             >
-            <small class="wb-month-context">{{ board.selection.month }}</small>
-            <small v-if="monthSummaries.get(item.id)?.progress == null" class="wb-month-context"
-              >无有效月目标或权重</small
+            <small
+              v-if="monthSummaries.get(item.id)?.progress == null"
+              class="wb-month-context"
+              title="所选月份没有关联的月目标，或有效权重合计为 0"
+              >暂无本月进度</small
             >
           </td>
-          <td v-if="type === 'annual'" data-label="月度完成" :data-month-completion="item.id">
+          <td
+            v-if="type === 'annual'"
+            data-label="月度完成（全部关联月份）"
+            :data-month-completion="item.id"
+          >
             <div class="wb-month-counts" aria-label="全部关联月目标完成数量">
               <span
                 class="is-done"
                 :aria-label="`已完成 ${monthSummaries.get(item.id)?.complete} 项月目标`"
-                >✓ {{ monthSummaries.get(item.id)?.complete }}</span
+                >已完成 {{ monthSummaries.get(item.id)?.complete }} 项</span
               >
               <span :aria-label="`未完成 ${monthSummaries.get(item.id)?.incomplete} 项月目标`"
-                >○ {{ monthSummaries.get(item.id)?.incomplete }}</span
+                >未完成 {{ monthSummaries.get(item.id)?.incomplete }} 项</span
               >
               <span
                 v-if="monthSummaries.get(item.id)?.terminated"
                 :aria-label="`已终止 ${monthSummaries.get(item.id)?.terminated} 项月目标`"
-                >终止 {{ monthSummaries.get(item.id)?.terminated }}</span
+                >已终止 {{ monthSummaries.get(item.id)?.terminated }} 项</span
               >
             </div>
-            <small class="wb-month-context">全部关联月份</small>
           </td>
           <td data-label="状态">
             <ChoicePicker
@@ -363,7 +393,7 @@ function changeState(item: WorkItem, value: string) {
               @blur="board.save(item.id)"
             />
           </td>
-          <td data-label="拆解与操作">
+          <td v-if="type === 'monthly'" data-label="拆解与操作">
             <small
               >{{ children(item).filter((v) => itemComplete(v, all)).length }}/{{
                 children(item).length
@@ -371,12 +401,8 @@ function changeState(item: WorkItem, value: string) {
               项下级完成</small
             >
             <div class="wb-table-row-actions">
-              <button
-                type="button"
-                class="wb-link"
-                @click="emit('add', type === 'annual' ? 'monthly' : 'weekly', item.id)"
-              >
-                {{ type === 'annual' ? '+ 拆月目标' : '+ 拆周任务' }}</button
+              <button type="button" class="wb-link" @click="emit('add', 'weekly', item.id)">
+                + 拆周任务</button
               ><button type="button" class="wb-link" @click="emit('open', item)">详情</button
               ><button
                 type="button"
