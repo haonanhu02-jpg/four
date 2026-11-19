@@ -309,11 +309,11 @@ onUnmounted(() => {
 </script>
 <template>
   <main class="workbench" aria-label="四层工作台">
-    <div class="wb-toolbar">
-      <div>
-        <p class="wb-eyebrow">年 → 月 → 周 → 日</p>
-        <h1>个人工作台</h1>
-        <p class="wb-subtitle">从年度方向到每日行动，层层对齐。</p>
+    <h1 class="sr-only">个人工作台</h1>
+    <div class="wb-command-bar">
+      <div class="wb-workspace-tools">
+        <DataPanel v-if="store.userId === account.session?.user.id" />
+        <AdminPanel v-if="account.session?.user.role === 'admin' && !store.offline" />
       </div>
       <div class="wb-actions">
         <span class="wb-cloud" :class="{ pending: store.hasUnsaved }" role="status"
@@ -337,16 +337,10 @@ onUnmounted(() => {
         >
           {{ loggingOut ? '正在退出…' : store.isGuest ? '登录同步' : '退出登录' }}
         </button>
+        <span class="wb-header-date"
+          >今天 · {{ dayLabel(todayIn(account.session?.user.timezone)) }}</span
+        >
       </div>
-    </div>
-    <div class="wb-account-line">
-      {{ account.session?.user.username ?? account.session?.user.email
-      }}<span>今天 · {{ dayLabel(todayIn(account.session?.user.timezone)) }}</span>
-    </div>
-    <div class="wb-workspace-tools">
-      <DataPanel v-if="store.userId === account.session?.user.id" /><AdminPanel
-        v-if="account.session?.user.role === 'admin' && !store.offline"
-      />
     </div>
     <p v-if="store.isGuest || store.offline || store.hasUnsaved" class="wb-local-note">
       {{
@@ -421,107 +415,114 @@ onUnmounted(() => {
       ><button type="button" aria-label="关闭顺延提示" @click="store.rolloverNotice = ''">×</button>
     </div>
     <CarryoverPanel v-if="!store.isGuest && !store.offline" @open="openItem" />
-    <nav class="wb-view-tabs" aria-label="工作台视图">
-      <button
-        type="button"
-        :class="{ active: store.view === 'annual' }"
-        :aria-pressed="store.view === 'annual'"
-        data-view="annual"
-        @click="store.view = 'annual'"
-      >
-        年度目标 <span>{{ store.groups.annual.total }}</span></button
-      ><button
-        type="button"
-        :class="{ active: store.view === 'monthly' }"
-        :aria-pressed="store.view === 'monthly'"
-        data-view="monthly"
-        @click="store.view = 'monthly'"
-      >
-        月度执行 <span>{{ store.groups.monthly.total }}</span></button
-      ><button
-        type="button"
-        data-view="weekly"
-        :class="{ active: store.view === 'weekly' }"
-        :aria-pressed="store.view === 'weekly'"
-        @click="store.view = 'weekly'"
-      >
-        周任务 <span>{{ store.groups.weekly.total }}</span></button
-      ><button
-        type="button"
-        data-view="charts"
-        :class="{ active: store.view === 'charts' }"
-        :aria-pressed="store.view === 'charts'"
-        @click="store.view = 'charts'"
-      >
-        图表看板</button
-      ><button
-        type="button"
-        data-view="tree"
-        :class="{ active: store.view === 'tree' }"
-        :aria-pressed="store.view === 'tree'"
-        @click="store.view = 'tree'"
-      >
-        清单</button
-      ><small
-        >{{ store.selection.year }} 年{{
-          ['monthly', 'weekly', 'charts'].includes(store.view)
-            ? ` · ${store.selection.month.slice(5)}月`
-            : ''
-        }}</small
-      >
-    </nav>
-    <section class="wb-period" aria-label="查看周期">
-      <label
-        >年度<input
-          v-model.number="year"
-          type="number"
-          min="1970"
-          max="9999"
-          aria-label="查看年度"
-          :disabled="store.loading"
-          @change="changeYear"
-      /></label>
-      <template v-if="['monthly', 'weekly', 'charts'].includes(store.view)">
+    <div class="wb-view-controls" :class="{ 'is-annual': store.view === 'annual' }">
+      <nav class="wb-view-tabs" aria-label="工作台视图">
+        <button
+          type="button"
+          :class="{ active: store.view === 'annual' }"
+          :aria-pressed="store.view === 'annual'"
+          data-view="annual"
+          @click="store.view = 'annual'"
+        >
+          年度目标 <span>{{ store.groups.annual.total }}</span></button
+        ><button
+          type="button"
+          :class="{ active: store.view === 'monthly' }"
+          :aria-pressed="store.view === 'monthly'"
+          data-view="monthly"
+          @click="store.view = 'monthly'"
+        >
+          月度执行 <span>{{ store.groups.monthly.total }}</span></button
+        ><button
+          type="button"
+          data-view="weekly"
+          :class="{ active: store.view === 'weekly' }"
+          :aria-pressed="store.view === 'weekly'"
+          @click="store.view = 'weekly'"
+        >
+          周任务 <span>{{ store.groups.weekly.total }}</span></button
+        ><button
+          type="button"
+          data-view="charts"
+          :class="{ active: store.view === 'charts' }"
+          :aria-pressed="store.view === 'charts'"
+          @click="store.view = 'charts'"
+        >
+          图表看板</button
+        ><button
+          type="button"
+          data-view="tree"
+          :class="{ active: store.view === 'tree' }"
+          :aria-pressed="store.view === 'tree'"
+          @click="store.view = 'tree'"
+        >
+          清单</button
+        ><small
+          >{{ store.selection.year }} 年{{
+            ['monthly', 'weekly', 'charts'].includes(store.view)
+              ? ` · ${store.selection.month.slice(5)}月`
+              : ''
+          }}</small
+        >
+      </nav>
+      <section class="wb-period" aria-label="查看周期">
         <label
-          >月份<input
-            v-model="month"
-            type="month"
-            aria-label="查看月份"
+          >年度<input
+            v-model.number="year"
+            type="number"
+            min="1970"
+            max="9999"
+            aria-label="查看年度"
             :disabled="store.loading"
-            @change="changeMonth()"
+            @change="changeYear"
         /></label>
-        <form v-if="store.view !== 'charts'" class="wb-range-form" @submit.prevent="applyRange">
-          <span>周 / 自定义区间</span>
-          <div>
-            <button type="button" class="wb-icon-button" aria-label="上一个区间" @click="shift(-1)">
-              ‹</button
-            ><input v-model="start" type="date" aria-label="查看区间开始" required /><span>—</span
-            ><input v-model="end" type="date" aria-label="查看区间结束" required /><button
-              type="button"
-              class="wb-icon-button"
-              aria-label="下一个区间"
-              @click="shift(1)"
-            >
-              ›</button
-            ><button type="submit" class="wb-button">应用</button>
-          </div>
-        </form>
-        <label v-if="store.view !== 'charts'"
-          >日期<input
-            v-model="date"
-            type="date"
-            aria-label="查看日期"
-            :disabled="store.loading"
-            @change="changeDate"
-        /></label>
-      </template>
-      <button type="button" class="wb-today" @click="today">回到今天</button>
-      <small v-if="['monthly', 'weekly'].includes(store.view)" class="wb-range-meta"
-        >{{ dayLabel(store.selection.start) }} — {{ dayLabel(store.selection.end) }} ·
-        {{ daySpan(store.selection.start, store.selection.end) }}
-        天<br />显示与区间有交集的周任务</small
-      >
-    </section>
+        <template v-if="['monthly', 'weekly', 'charts'].includes(store.view)">
+          <label
+            >月份<input
+              v-model="month"
+              type="month"
+              aria-label="查看月份"
+              :disabled="store.loading"
+              @change="changeMonth()"
+          /></label>
+          <form v-if="store.view !== 'charts'" class="wb-range-form" @submit.prevent="applyRange">
+            <span>周 / 自定义区间</span>
+            <div>
+              <button
+                type="button"
+                class="wb-icon-button"
+                aria-label="上一个区间"
+                @click="shift(-1)"
+              >
+                ‹</button
+              ><input v-model="start" type="date" aria-label="查看区间开始" required /><span>—</span
+              ><input v-model="end" type="date" aria-label="查看区间结束" required /><button
+                type="button"
+                class="wb-icon-button"
+                aria-label="下一个区间"
+                @click="shift(1)"
+              >
+                ›</button
+              ><button type="submit" class="wb-button">应用</button>
+            </div>
+          </form>
+          <label v-if="store.view !== 'charts'"
+            >日期<input
+              v-model="date"
+              type="date"
+              aria-label="查看日期"
+              :disabled="store.loading"
+              @change="changeDate"
+          /></label>
+        </template>
+        <button type="button" class="wb-today" @click="today">回到今天</button>
+        <small v-if="['monthly', 'weekly'].includes(store.view)" class="wb-range-meta"
+          >{{ dayLabel(store.selection.start) }} — {{ dayLabel(store.selection.end) }} ·
+          {{ daySpan(store.selection.start, store.selection.end) }}
+          天<br />显示与区间有交集的周任务</small
+        >
+      </section>
+    </div>
     <p v-if="store.loading" class="wb-loading" role="status">正在读取工作台…</p>
 
     <OverviewPanel

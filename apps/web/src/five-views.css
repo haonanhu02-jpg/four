@@ -1058,3 +1058,193 @@
     flex-wrap: wrap;
   }
 }
+
+/* Compact workspace chrome keeps the goal list near the top of the page. */
+.has-workspace .site-header {
+  height: auto;
+  min-height: 64px;
+  padding: 10px 0;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.has-workspace .brand {
+  flex-shrink: 0;
+  font-size: 19px;
+}
+.has-workspace .brand-mark {
+  width: 33px;
+  height: 36px;
+  border-radius: 10px;
+}
+.workspace-heading {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.workspace-heading > div {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.workspace-heading strong {
+  font-weight: 600;
+  font-size: 13px;
+}
+.workspace-heading p {
+  margin: 1px 0 0;
+  overflow-wrap: anywhere;
+}
+.workspace-heading p span {
+  margin-left: 12px;
+}
+.has-workspace .workbench {
+  padding-top: 10px;
+}
+.wb-command-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.wb-command-bar .wb-workspace-tools {
+  display: contents;
+}
+.wb-command-bar .wb-actions {
+  flex: 1;
+  gap: 6px;
+}
+.wb-command-bar > .wb-workspace-tools > .wb-data-tools {
+  margin: 0;
+  gap: 6px;
+}
+.wb-command-bar > .wb-actions > .wb-button,
+.wb-command-bar > .wb-workspace-tools > .wb-data-tools > .wb-button,
+.wb-command-bar > .wb-workspace-tools > .wb-button {
+  padding: 6px 10px;
+}
+.wb-header-date {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.workbench .wb-local-note {
+  margin: 4px 0 8px;
+  font-size: 11px;
+}
+.workbench .wb-banner {
+  margin: 8px 0;
+  padding: 8px 12px;
+}
+.wb-view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.wb-view-controls .wb-view-tabs {
+  width: 100%;
+  margin: 0;
+  gap: 6px;
+}
+.wb-view-controls .wb-view-tabs > button {
+  padding: 8px 12px;
+}
+.wb-view-controls .wb-period {
+  width: 100%;
+  padding: 8px 12px;
+  gap: 8px 12px;
+}
+.wb-view-controls .wb-period input {
+  min-height: 32px;
+  padding: 5px 7px;
+}
+.workbench .wb-overview {
+  margin: 10px 0 12px;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, auto);
+  gap: 0 14px;
+}
+.wb-overview .wb-stat-grid {
+  grid-column: 1/-1;
+  width: 100%;
+}
+.wb-overview .wb-stat strong {
+  font-size: 20px;
+}
+.wb-overview .wb-focus-disclosure,
+.wb-overview .wb-calculation {
+  margin: 8px 0 0;
+  padding: 7px 0 0;
+  min-width: 0;
+  border-top: 1px solid var(--border);
+}
+.wb-overview .wb-focus-disclosure[open],
+.wb-overview .wb-calculation[open] {
+  grid-column: 1/-1;
+}
+@media (min-width: 701px) {
+  .wb-overview .wb-calculation summary span {
+    float: none;
+    display: inline;
+    margin-left: 12px;
+  }
+}
+@media (min-width: 1000px) {
+  .wb-view-controls.is-annual .wb-view-tabs {
+    flex: 1;
+    width: auto;
+  }
+  .wb-view-controls.is-annual .wb-period {
+    width: auto;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  .wb-view-controls .wb-period > label {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+  }
+}
+@media (max-width: 700px) {
+  .has-workspace .site-header {
+    gap: 8px 12px;
+    padding: 10px 0;
+  }
+  .workspace-heading {
+    flex-basis: 100%;
+    order: 3;
+  }
+  .has-workspace .brand {
+    font-size: 17px;
+  }
+  .workspace-heading > div {
+    gap: 10px;
+  }
+  .wb-command-bar .wb-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+  .wb-command-bar .wb-cloud {
+    width: auto;
+    flex-basis: 100%;
+  }
+  .wb-header-date {
+    margin-left: auto;
+  }
+  .workbench .wb-overview {
+    display: flex;
+    gap: 0;
+    padding: 12px;
+  }
+  .wb-goal-table .wb-filter-tabs button {
+    flex: 1 0 calc(33.333% - 8px);
+    white-space: nowrap;
+  }
+}

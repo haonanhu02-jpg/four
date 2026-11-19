@@ -289,6 +289,18 @@ try {
   }
   await view('annual');
   assert.equal(await evaluate('document.querySelectorAll(".wb-goals-table tbody tr").length'), 4);
+  assert.ok(
+    await evaluate(
+      'document.querySelector(".site-header").contains(document.querySelector(".workspace-heading"))',
+    ),
+    'Workspace context belongs beside the site brand',
+  );
+  assert.ok(
+    await evaluate(
+      'document.querySelector(".wb-section[aria-label=年度目标]").getBoundingClientRect().top<560',
+    ),
+    'Goal section should appear higher in the desktop viewport',
+  );
   const goal = await evaluate(
     'JSON.parse(JSON.stringify(Object.values(board.records).find(v=>v.type==="annual"&&!v.deletedAt&&!v.archivedAt)))',
   );

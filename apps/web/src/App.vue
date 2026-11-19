@@ -90,7 +90,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="site-shell">
+  <div class="site-shell" :class="{ 'has-workspace': !!account.session }">
     <header class="site-header">
       <a class="brand" href="/" aria-label="四层对齐工作台首页">
         <span class="brand-mark" aria-hidden="true">
@@ -106,6 +106,14 @@ onMounted(() => {
         </span>
         <span>四层对齐<span class="brand-accent">工作台</span></span>
       </a>
+      <div v-if="account.session" class="workspace-heading">
+        <div><strong>个人工作台</strong><span>年 → 月 → 周 → 日</span></div>
+        <p>
+          从年度方向到每日行动，层层对齐。<span>{{
+            account.session.user.username ?? account.session.user.email
+          }}</span>
+        </p>
+      </div>
       <AppTools />
     </header>
 
