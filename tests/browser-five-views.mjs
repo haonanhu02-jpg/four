@@ -301,6 +301,122 @@ try {
     ),
     'Goal section should appear higher in the desktop viewport',
   );
+  const summaryGoal = await evaluate(
+    'board.add("annual",undefined,{title:"月度汇总与开始操作验证",progress:0}).then(v=>v.id)',
+  );
+  const summaryRow = `[data-item-id="${summaryGoal}"]`;
+  await wait(`!!document.querySelector('${summaryRow}')`, 'summary test goal');
+  assert.equal(
+    await evaluate(
+      `document.querySelector('[data-month-progress="${summaryGoal}"] strong').textContent`,
+    ),
+    '—',
+  );
+  assert.ok(
+    await evaluate(
+      `document.querySelector('${summaryRow} [aria-label="年度目标执行状态"]').textContent.includes('未开始')`,
+    ),
+  );
+  await click(`${summaryRow} [aria-label="年度目标执行状态"]`);
+  await clickText('开始执行（1%）');
+  await wait(`board.records['${summaryGoal}'].progress===1`, 'start goal at one percent');
+  assert.ok(
+    await evaluate(
+      `document.querySelector('${summaryRow} [aria-label="年度目标执行状态"]').textContent.includes('进行中')`,
+    ),
+  );
+  await click(`${summaryRow} [aria-label="年度目标执行状态"]`);
+  await clickText('标记完成（100%）');
+  await wait(`board.records['${summaryGoal}'].progress===100`, 'complete goal');
+  await click(`${summaryRow} [aria-label="年度目标执行状态"]`);
+  await clickText('重置为未开始（0%）');
+  await click(`${summaryRow} [aria-label="年度进度模式"]`);
+  await clickText('月目标自动汇总');
+  await click(`${summaryRow} [aria-label="年度目标执行状态"]`);
+  await clickText('切换手动并开始（1%）');
+  await wait(
+    `board.records['${summaryGoal}'].progressMode==='manual'&&board.records['${summaryGoal}'].progress===1`,
+    'automatic goal only switches mode through explicit manual action',
+  );
+  await evaluate(`board.edit(board.records['${summaryGoal}'],{progressMode:'auto'})`);
+  const selectedMonth = await evaluate('board.selection.month');
+  const otherMonth = selectedMonth.endsWith('-01')
+    ? `${selectedMonth.slice(0, 4)}-02`
+    : `${selectedMonth.slice(0, 4)}-01`;
+  const summaryMonths = await evaluate(`(async()=>{
+    const values=[
+      {title:'本月完成',month:${JSON.stringify(selectedMonth)},progress:100,weight:20},
+      {title:'本月进行中',month:${JSON.stringify(selectedMonth)},progress:50,weight:80},
+      {title:'其他月份',month:${JSON.stringify(otherMonth)},progress:0,weight:100},
+      {title:'终止月目标',month:${JSON.stringify(selectedMonth)},progress:100,weight:100,terminated:true},
+      {title:'删除月目标',month:${JSON.stringify(selectedMonth)},progress:100,weight:100}
+    ];
+    const ids=[];for(const value of values)ids.push((await board.add('monthly','${summaryGoal}',value)).id);
+    await board.remove(board.records[ids[4]]);return ids;
+  })()`);
+  const monthProgressSelector = `[data-month-progress="${summaryGoal}"] strong`;
+  const completionSelector = `[data-month-completion="${summaryGoal}"]`;
+  await wait(
+    `document.querySelector('${monthProgressSelector}').textContent==='60%'`,
+    'current month weighted progress excludes other months, terminated and deleted goals',
+  );
+  assert.equal(
+    await evaluate(
+      `document.querySelector('[data-auto-progress="${summaryGoal}"]').textContent.trim()`,
+    ),
+    '30%',
+  );
+  for (const label of ['已完成 1 项月目标', '未完成 2 项月目标', '已终止 1 项月目标'])
+    assert.ok(
+      await evaluate(`!!document.querySelector('${completionSelector} [aria-label="${label}"]')`),
+      label,
+    );
+  await evaluate(`board.edit(board.records['${summaryMonths[1]}'],{progress:100})`);
+  await wait(
+    `document.querySelector('${monthProgressSelector}').textContent==='100%'&&!!document.querySelector('${completionSelector} [aria-label="已完成 2 项月目标"]')`,
+    'monthly completion updates without completing other months',
+  );
+  assert.equal(
+    await evaluate(
+      `document.querySelector('[data-auto-progress="${summaryGoal}"]').textContent.trim()`,
+    ),
+    '50%',
+  );
+  await evaluate(`board.edit(board.records['${summaryMonths[2]}'],{progress:100})`);
+  await wait(
+    `document.querySelector('${summaryRow} [aria-label="年度目标执行状态"]').textContent.includes('已完成')`,
+    'automatic goal completes when all weighted months complete',
+  );
+  await evaluate(
+    `board.edit(board.records['${summaryMonths[1]}'],{progress:50});board.edit(board.records['${summaryMonths[2]}'],{progress:0})`,
+  );
+  await evaluate(`board.selection.month=${JSON.stringify(otherMonth)}`);
+  await wait(
+    `document.querySelector('${monthProgressSelector}').textContent==='0%'`,
+    'monthly column follows selected month',
+  );
+  await evaluate(
+    `board.selection.month=${JSON.stringify(selectedMonth)};board.edit(board.records['${summaryMonths[0]}'],{weight:0});board.edit(board.records['${summaryMonths[1]}'],{weight:0})`,
+  );
+  await wait(
+    `document.querySelector('${monthProgressSelector}').textContent==='—'`,
+    'zero monthly weights do not imply progress',
+  );
+  await evaluate(
+    `board.edit(board.records['${summaryMonths[0]}'],{weight:20});board.edit(board.records['${summaryMonths[1]}'],{weight:80})`,
+  );
+  await wait('!board.hasUnpersisted', 'summary edits persisted');
+  await reloadPage();
+  await evaluate(
+    'window.board=document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench");true',
+  );
+  await wait(
+    `document.querySelector('${monthProgressSelector}').textContent==='60%'`,
+    'monthly summary survives reload',
+  );
+  await evaluate(
+    `(async()=>{for(const id of ${JSON.stringify(summaryMonths.slice(0, 4))})await board.remove(board.records[id]);await board.remove(board.records['${summaryGoal}']);})()`,
+  );
   const goal = await evaluate(
     'JSON.parse(JSON.stringify(Object.values(board.records).find(v=>v.type==="annual"&&!v.deletedAt&&!v.archivedAt)))',
   );

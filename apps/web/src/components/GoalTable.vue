@@ -4,6 +4,7 @@ import {
   effectiveProgress,
   itemComplete,
   itemState,
+  weightedProgress,
   type WorkItem,
   type WorkItemType,
   type WorkItemValues,
@@ -95,6 +96,55 @@ function edit(item: WorkItem, field: keyof WorkItemValues, event: Event, number 
 const name = computed(() => (props.type === 'annual' ? '年度目标' : '月度目标'));
 const children = (item: WorkItem) =>
   all.value.filter((v) => v.parentId === item.id && !v.deletedAt && !v.archivedAt);
+const monthSummaries = computed(() => {
+  const result = new Map<
+    string,
+    { progress: number | null; complete: number; incomplete: number; terminated: number }
+  >();
+  for (const goal of goals.value) {
+    const months = children(goal).filter((v) => v.type === 'monthly');
+    const active = months.filter((v) => !v.terminated);
+    const complete = active.filter((v) => itemComplete(v, all.value)).length;
+    result.set(goal.id, {
+      progress: weightedProgress(active.filter((v) => v.month === board.selection.month)),
+      complete,
+      incomplete: active.length - complete,
+      terminated: months.length - active.length,
+    });
+  }
+  return result;
+});
+function stateOptions(item: WorkItem) {
+  const state = itemState(item, all.value);
+  const automatic = props.type === 'annual' && item.progressMode === 'auto';
+  return [
+    { value: 'active', label: item.terminated ? '恢复执行' : states[state] },
+    ...(state === 'todo'
+      ? [{ value: 'start', label: automatic ? '切换手动并开始（1%）' : '开始执行（1%）' }]
+      : []),
+    ...(!item.terminated && state !== 'complete'
+      ? [{ value: 'finish', label: automatic ? '切换手动并完成（100%）' : '标记完成（100%）' }]
+      : []),
+    ...(!item.terminated && state !== 'todo'
+      ? [{ value: 'reset', label: automatic ? '切换手动并重置（0%）' : '重置为未开始（0%）' }]
+      : []),
+    { value: 'terminated', label: '已终止' },
+  ];
+}
+function changeState(item: WorkItem, value: string) {
+  if (value === 'active' || value === 'terminated') {
+    board.edit(item, { terminated: value === 'terminated' });
+    return;
+  }
+  const progress =
+    value === 'start' ? 1 : value === 'finish' ? 100 : value === 'reset' ? 0 : undefined;
+  if (progress === undefined) return;
+  board.edit(item, {
+    terminated: false,
+    progress,
+    ...(props.type === 'annual' ? { progressMode: 'manual' as const } : {}),
+  });
+}
 </script>
 <template>
   <div class="wb-goal-table">
@@ -128,7 +178,7 @@ const children = (item: WorkItem) =>
         }}
       </small>
     </div>
-    <table v-if="rows.length" class="wb-goals-table">
+    <table v-if="rows.length" class="wb-goals-table" :class="{ 'is-annual': type === 'annual' }">
       <caption class="sr-only">
         {{
           name
@@ -140,7 +190,11 @@ const children = (item: WorkItem) =>
           <th scope="col">{{ type === 'annual' ? '进度模式' : '年度来源' }}</th>
           <th scope="col">权重</th>
           <th scope="col">{{ type === 'annual' ? '预计完成' : '截止日期' }}</th>
-          <th scope="col">进度</th>
+          <th scope="col">{{ type === 'annual' ? '年度进度' : '进度' }}</th>
+          <th v-if="type === 'annual'" scope="col">
+            本月进度<small class="wb-month-context">{{ board.selection.month }}</small>
+          </th>
+          <th v-if="type === 'annual'" scope="col">月度完成</th>
           <th scope="col">状态</th>
           <th scope="col">拆解与操作</th>
         </tr>
@@ -231,7 +285,7 @@ const children = (item: WorkItem) =>
               @change="edit(item, 'dueDate', $event)"
             />
           </td>
-          <td data-label="进度">
+          <td :data-label="type === 'annual' ? '年度进度' : '进度'">
             <div class="wb-table-progress">
               <label
                 v-if="type !== 'annual' || item.progressMode !== 'auto'"
@@ -257,18 +311,47 @@ const children = (item: WorkItem) =>
               >
             </div>
           </td>
+          <td v-if="type === 'annual'" data-label="本月进度" :data-month-progress="item.id">
+            <strong
+              class="wb-month-progress"
+              :title="`${board.selection.month} 月目标按权重汇总；已终止项不计入`"
+              >{{
+                monthSummaries.get(item.id)?.progress == null
+                  ? '—'
+                  : `${monthSummaries.get(item.id)!.progress}%`
+              }}</strong
+            >
+            <small class="wb-month-context">{{ board.selection.month }}</small>
+            <small v-if="monthSummaries.get(item.id)?.progress == null" class="wb-month-context"
+              >无有效月目标或权重</small
+            >
+          </td>
+          <td v-if="type === 'annual'" data-label="月度完成" :data-month-completion="item.id">
+            <div class="wb-month-counts" aria-label="全部关联月目标完成数量">
+              <span
+                class="is-done"
+                :aria-label="`已完成 ${monthSummaries.get(item.id)?.complete} 项月目标`"
+                >✓ {{ monthSummaries.get(item.id)?.complete }}</span
+              >
+              <span :aria-label="`未完成 ${monthSummaries.get(item.id)?.incomplete} 项月目标`"
+                >○ {{ monthSummaries.get(item.id)?.incomplete }}</span
+              >
+              <span
+                v-if="monthSummaries.get(item.id)?.terminated"
+                :aria-label="`已终止 ${monthSummaries.get(item.id)?.terminated} 项月目标`"
+                >终止 {{ monthSummaries.get(item.id)?.terminated }}</span
+              >
+            </div>
+            <small class="wb-month-context">全部关联月份</small>
+          </td>
           <td data-label="状态">
             <ChoicePicker
+              class="wb-goal-state"
+              :class="`is-${itemState(item, all)}`"
               :model-value="item.terminated ? 'terminated' : 'active'"
               :label="`${name}执行状态`"
-              :options="[
-                {
-                  value: 'active',
-                  label: item.terminated ? '恢复执行' : states[itemState(item, all)],
-                },
-                { value: 'terminated', label: '已终止' },
-              ]"
-              @update:model-value="(v) => board.edit(item, { terminated: v === 'terminated' })"
+              :options="stateOptions(item)"
+              @update:model-value="(v) => changeState(item, v)"
             />
             <input
               v-if="item.terminated"
@@ -309,6 +392,10 @@ const children = (item: WorkItem) =>
       </tbody>
     </table>
     <p v-else class="wb-insight-empty">当前筛选没有匹配目标。</p>
+    <p v-if="rows.length" class="wb-goal-state-help">
+      状态随进度更新：0% 未开始，1%–99% 进行中，100%
+      已完成。可从状态菜单开始执行或标记完成；自动汇总时修改月目标进度即可，手动操作会明确切换进度模式。
+    </p>
     <p
       v-if="goals.length"
       class="wb-weight-summary"

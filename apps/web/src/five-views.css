@@ -1060,6 +1060,87 @@
 }
 
 /* Compact workspace chrome keeps the goal list near the top of the page. */
+.wb-goals-table.is-annual th:nth-child(1) {
+  width: 22%;
+}
+.wb-goals-table.is-annual th:nth-child(2) {
+  width: 12%;
+}
+.wb-goals-table.is-annual th:nth-child(3) {
+  width: 7%;
+}
+.wb-goals-table.is-annual th:nth-child(4) {
+  width: 11%;
+}
+.wb-goals-table.is-annual th:nth-child(5) {
+  width: 10%;
+}
+.wb-goals-table.is-annual th:nth-child(6) {
+  width: 8%;
+}
+.wb-goals-table.is-annual th:nth-child(7) {
+  width: 10%;
+}
+.wb-goals-table.is-annual th:nth-child(8) {
+  width: 9%;
+}
+.wb-goals-table.is-annual th:nth-child(9) {
+  width: 11%;
+}
+.wb-month-progress {
+  color: var(--link);
+  font-size: 14px;
+}
+.wb-month-context {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.wb-month-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.wb-month-counts > span {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 2px 6px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-size: 11px;
+}
+.wb-month-counts > .is-done {
+  color: var(--positive);
+  background: var(--positive-bg);
+  border-color: currentColor;
+}
+.wb-goal-state .wb-choice-trigger {
+  border: 1px solid currentColor;
+  border-radius: 14px;
+  padding: 4px 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.wb-goal-state.is-doing .wb-choice-trigger {
+  color: var(--link);
+  background: var(--accent-soft);
+}
+.wb-goal-state.is-complete .wb-choice-trigger {
+  color: var(--positive);
+  background: var(--positive-bg);
+}
+.wb-goal-state.is-terminated .wb-choice-trigger {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.wb-goal-state-help {
+  margin: 8px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
 .has-workspace .site-header {
   height: auto;
   min-height: 64px;
