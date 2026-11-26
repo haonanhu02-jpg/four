@@ -280,6 +280,25 @@ try {
     `document.querySelector('[data-title-id="${automaticWeek}"]')?.value==='从未开始年度拆出的月目标'`,
     'monthly creation generates a named weekly task',
   );
+  await input(`[data-item-id="${automaticWeek}"] [aria-label="周任务进度"]`, '37');
+  await wait(
+    `board.records['${automaticWeek}'].progress===37&&board.records['${automaticWeek}'].status==='doing'`,
+    'weekly numeric progress derives doing state',
+  );
+  await wait(
+    'document.querySelector("[data-metric=weekly] strong").textContent.trim()==="37%"',
+    'weekly metric uses actual percentage',
+  );
+  await input(`[data-item-id="${automaticWeek}"] [aria-label="周任务进度"]`, '100');
+  await wait(
+    `document.querySelector('[data-item-id="${automaticWeek}"]').classList.contains('is-complete')&&board.records['${automaticWeek}'].status==='done'`,
+    'one hundred percent completes weekly task',
+  );
+  await input(`[data-item-id="${automaticWeek}"] [aria-label="周任务进度"]`, '0');
+  await wait(
+    `board.records['${automaticWeek}'].status==='todo'`,
+    'zero progress resets weekly state',
+  );
   assert.equal(
     await evaluate(
       'Object.values(board.records).filter(v=>v.type==="weekly"&&!v.deletedAt).length',
@@ -716,7 +735,8 @@ try {
       'document.querySelector(".wb-unlinked-toggle").textContent.includes("今日剩 1")',
     ),
   );
-  await click(`.wb-unlinked-days [data-item-id="${orphans[1]}"] input[type="checkbox"]`);
+  await click(`.wb-unlinked-days [data-item-id="${orphans[1]}"] [aria-label="日待办完成状态"]`);
+  await clickText('已完成');
   await wait(
     'document.querySelector(".wb-unlinked-toggle").textContent.includes("今日剩 0")',
     'completing a task updates remaining count',
@@ -830,7 +850,8 @@ try {
     `!!document.querySelector('.wb-daily-execution [data-item-id="${newDaily}"]')`,
     'saved daily item visible on its date',
   );
-  await click(`.wb-daily-execution [data-item-id="${newDaily}"] input[type="checkbox"]`);
+  await click(`.wb-daily-execution [data-item-id="${newDaily}"] [aria-label="日待办完成状态"]`);
+  await clickText('已完成');
   await wait(`board.records['${newDaily}'].done===true`, 'daily completion updates shared data');
   await view('weekly');
   assert.ok(

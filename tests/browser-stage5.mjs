@@ -334,6 +334,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     if ((await evaluate('board.records[' + JSON.stringify(weekly) + '].title')) !== '离线新增月度')
       throw Error('Generated offline weekly task did not inherit monthly title');
     await set('[data-title-id="' + weekly + '"]', '离线新增周任务');
+    await set('[data-item-id="' + weekly + '"] [aria-label="周任务进度"]', '37');
     await persisted();
     await evaluate(
       'Promise.all([board.add("daily",' +
@@ -370,6 +371,8 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       const row = doc.items[type].find((v) => v.id === id);
       if (!row || row.parentId !== parent)
         throw Error('Stable identity/lineage lost on sync ' + type);
+      if (type === 'weekly' && (row.progress !== 37 || row.status !== 'doing'))
+        throw Error('Offline weekly percentage lost on sync');
     }
     // Lost response after the server committed: retry must use the same operation ID.
     await evaluate(

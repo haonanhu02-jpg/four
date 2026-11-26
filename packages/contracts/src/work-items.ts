@@ -42,6 +42,7 @@ const monthly = z
   .strict();
 const weekly = z
   .object({
+    progress: progress.optional(),
     terminated: z.boolean().optional(),
     terminationReason: note.optional(),
     title: text,

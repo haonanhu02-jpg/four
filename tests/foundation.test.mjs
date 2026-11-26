@@ -439,6 +439,44 @@ async function featureAccount(label) {
     cookie: login.response.headers.get('set-cookie').split(';')[0],
   };
 }
+test('weekly progress is persisted, drives status and overview, and accepts legacy status edits', async () => {
+  const account = await featureAccount('weekly-progress');
+  const q = {
+    year: 2040,
+    month: '2040-01',
+    start: '2040-01-02',
+    end: '2040-01-08',
+    date: '2040-01-02',
+  };
+  let week = await createItem(
+    'weekly',
+    { startDate: q.start, endDate: q.end, status: 'doing' },
+    account.cookie,
+  );
+  assert.equal(week.progress, 50);
+  week = await updateItem(week, { progress: 37.5 }, account.cookie);
+  assert.equal(week.progress, 37.5);
+  assert.equal(week.status, 'doing');
+  const overview = await request('/overview?' + new URLSearchParams(q), { cookie: account.cookie });
+  assert.equal(overview.body.weekly.value, 38);
+  week = await updateItem(week, { progress: 100 }, account.cookie);
+  assert.equal(week.status, 'done');
+  week = await updateItem(week, { progress: 0 }, account.cookie);
+  assert.equal(week.status, 'todo');
+  week = await updateItem(week, { status: 'block' }, account.cookie);
+  assert.equal(week.progress, 15);
+  assert.equal(week.status, 'block');
+  week = await updateItem(week, { progress: 15 }, account.cookie);
+  assert.equal(week.progress, 15);
+  assert.equal(week.status, 'doing');
+  const invalid = await request('/work-items/weekly/' + week.id, {
+    method: 'PATCH',
+    cookie: account.cookie,
+    body: { operationId: randomUUID(), baseVersion: week.version, values: { progress: 101 } },
+  });
+  assert.equal(invalid.response.status, 400);
+});
+
 test('five views: annual auto mode is owner scoped, reversible and reacts to child edits, delete and restore', async () => {
   const account = await featureAccount('rollup');
   let goal = await createItem(

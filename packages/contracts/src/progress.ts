@@ -1,4 +1,8 @@
 import type { WorkItem } from './work-items';
+export const legacyWeeklyProgress = (status: WorkItem['status']) =>
+  ({ todo: 0, doing: 50, block: 15, done: 100 })[status ?? 'todo'];
+export const weeklyStatus = (progress: number): 'todo' | 'doing' | 'done' =>
+  progress === 100 ? 'done' : progress === 0 ? 'todo' : 'doing';
 
 export const activeItem = (item: WorkItem) =>
   !item.deletedAt && !item.archivedAt && !item.terminated;
@@ -27,8 +31,7 @@ export function effectiveProgress(item: WorkItem, records: WorkItem[]): number {
         ),
       ) ?? 0
     );
-  if (item.type === 'weekly')
-    return { todo: 0, doing: 50, block: 15, done: 100 }[item.status ?? 'todo'];
+  if (item.type === 'weekly') return item.progress ?? legacyWeeklyProgress(item.status);
   if (item.type === 'daily') return item.done ? 100 : 0;
   return item.progress ?? 0;
 }

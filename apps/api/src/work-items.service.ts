@@ -215,6 +215,8 @@ export class WorkItemsService {
     }
     if (type === 'daily' && values.done !== undefined)
       result.completed_at = values.done ? new Date() : null;
+    if (type === 'weekly' && values.progress !== undefined)
+      result.status = values.progress === 100 ? 'done' : values.progress === 0 ? 'todo' : 'doing';
     return result;
   }
 

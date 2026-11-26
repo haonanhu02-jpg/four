@@ -216,6 +216,7 @@ export class DataService {
             original_end: value.originalEndDate ?? value.endDate,
             priority: value.priority,
             status: value.status,
+            progress: value.progress ?? null,
             rollover_count: value.rolloverCount ?? 0,
           });
         if (type === 'daily')

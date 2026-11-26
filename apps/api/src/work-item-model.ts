@@ -1,4 +1,5 @@
 import type { WorkItem, WorkItemType } from '@workbench/contracts';
+import { legacyWeeklyProgress } from '@workbench/contracts';
 export const DEFINITIONS = {
   annual: { table: 'annual_goals', parent: null, parentColumn: null, child: 'monthly' },
   monthly: {
@@ -59,6 +60,8 @@ export function item(type: WorkItemType, row: Row): WorkItem {
     result.originalEndDate = date(row.original_end);
     result.priority = row.priority as WorkItem['priority'];
     result.status = row.status as WorkItem['status'];
+    result.progress =
+      row.progress == null ? legacyWeeklyProgress(result.status) : Number(row.progress);
   }
   if (type === 'daily') {
     result.time = String(row.time_text ?? '');

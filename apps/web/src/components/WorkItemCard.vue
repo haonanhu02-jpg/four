@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import {
   effectiveProgress,
+  weeklyStatus,
   parseWorkMinutes,
   type WorkItem,
   type WorkItemType,
@@ -61,15 +62,17 @@ const completed = computed(
     (props.item.type === 'daily'
       ? props.item.done
       : props.item.type === 'weekly'
-        ? props.item.status === 'done'
+        ? progress.value === 100
         : progress.value === 100),
 );
 function text(field: keyof WorkItemValues, event: Event) {
   store.edit(props.item, { [field]: (event.target as HTMLInputElement).value } as WorkItemValues);
 }
 function number(field: keyof WorkItemValues, event: Event) {
+  const raw = Number((event.target as HTMLInputElement).value);
   store.edit(props.item, {
-    [field]: Number((event.target as HTMLInputElement).value),
+    [field]:
+      field === 'progress' ? Math.max(0, Math.min(100, Number.isFinite(raw) ? raw : 0)) : raw,
   } as WorkItemValues);
 }
 function change(field: keyof WorkItemValues, value: unknown) {
@@ -104,15 +107,7 @@ function addSibling() {
       >
         {{ item.terminated ? '已终止 · 恢复' : '终止' }}
       </button>
-      <input
-        v-if="item.type === 'daily'"
-        class="wb-checkbox"
-        type="checkbox"
-        :checked="item.done"
-        :aria-label="`完成${item.title || '日待办'}`"
-        @change="change('done', ($event.target as HTMLInputElement).checked)"
-      />
-      <span v-else-if="item.type === 'annual'" class="wb-order">{{
+      <span v-if="item.type === 'annual'" class="wb-order">{{
         String(index + 1).padStart(2, '0')
       }}</span>
       <input
@@ -125,6 +120,17 @@ function addSibling() {
         @input="text('title', $event)"
         @blur="store.save(item.id)"
         @keydown.enter.prevent="addSibling"
+      />
+      <ChoicePicker
+        v-if="item.type === 'daily'"
+        class="wb-daily-completion"
+        :model-value="item.done ? 'done' : 'todo'"
+        label="日待办完成状态"
+        :options="[
+          { value: 'todo', label: '未完成' },
+          { value: 'done', label: '已完成' },
+        ]"
+        @update:model-value="(v) => change('done', v === 'done')"
       />
       <button
         class="wb-delete"
@@ -156,14 +162,16 @@ function addSibling() {
       @blur="store.save(item.id)"
     />
 
-    <div v-if="item.type === 'annual' || item.type === 'monthly'" class="wb-progress">
+    <div v-if="item.type !== 'daily'" class="wb-progress">
       <div>
         <span>{{
           item.type === 'annual'
             ? item.progressMode === 'auto'
               ? '年度自动进度'
               : '年度手动进度'
-            : '本月手动进度'
+            : item.type === 'weekly'
+              ? '周任务进度'
+              : '本月手动进度'
         }}</span
         ><strong>{{ progress }}%</strong>
       </div>
@@ -174,8 +182,8 @@ function addSibling() {
         min="0"
         max="100"
         step="1"
-        :value="item.progress"
-        :aria-label="`${name}进度`"
+        :value="progress"
+        :aria-label="`${name}${item.type === 'weekly' ? '进度滑块' : '进度'}`"
         @input="number('progress', $event)"
         @change="store.save(item.id)"
       />
@@ -234,6 +242,18 @@ function addSibling() {
           @change="change('dueDate', ($event.target as HTMLInputElement).value || null)"
       /></label>
       <template v-if="item.type === 'weekly'">
+        <label class="wb-field"
+          >进度<input
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            :value="progress"
+            aria-label="周任务进度"
+            @input="number('progress', $event)"
+            @blur="store.save(item.id)"
+          />%</label
+        >
         <div class="wb-field">
           优先级<ChoicePicker
             :model-value="item.priority ?? 'P1'"
@@ -248,12 +268,11 @@ function addSibling() {
         </div>
         <div class="wb-field">
           状态<ChoicePicker
-            :model-value="item.terminated ? 'terminated' : (item.status ?? 'todo')"
+            :model-value="item.terminated ? 'terminated' : weeklyStatus(progress)"
             label="周任务状态"
             :options="[
               { value: 'todo', label: '未开始' },
               { value: 'doing', label: '进行中' },
-              { value: 'block', label: '受阻' },
               { value: 'done', label: '已完成' },
               { value: 'terminated', label: '已终止' },
             ]"
@@ -263,7 +282,17 @@ function addSibling() {
                   item,
                   v === 'terminated'
                     ? { terminated: true }
-                    : { terminated: false, status: v as WorkItemValues['status'] },
+                    : {
+                        terminated: false,
+                        progress:
+                          v === 'done'
+                            ? 100
+                            : v === 'todo'
+                              ? 0
+                              : progress > 0 && progress < 100
+                                ? progress
+                                : 1,
+                      },
                 );
                 void store.save(item.id);
               }

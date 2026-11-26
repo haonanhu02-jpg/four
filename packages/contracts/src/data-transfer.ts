@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { legacyWeeklyProgress, weeklyStatus } from './progress';
 import {
   workItemTypeSchema,
   workItemValueSchemas,
@@ -151,6 +152,7 @@ export function normalizeDocument(input: unknown): {
                     startDate: v.wkStart,
                     endDate: v.wkEnd,
                     status: v.status ?? 'todo',
+                    progress: v.progress,
                     priority: v.priority ?? 'P1',
                     parentId: v.monthId || null,
                   }
@@ -204,6 +206,9 @@ export function normalizeDocument(input: unknown): {
         item.dueDate ??= null;
       }
       if (type === 'weekly') {
+        if (item.progress === undefined) item.progress = legacyWeeklyProgress(item.status);
+        else if (!(item.status === 'block' && item.progress > 0 && item.progress < 100))
+          item.status = weeklyStatus(item.progress);
         if (item.startDate! > item.endDate!)
           throw new Error(`周任务 ${item.id} 结束日期早于开始日期`);
         item.originalStartDate ??= item.startDate;

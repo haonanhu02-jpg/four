@@ -440,6 +440,21 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
+.wb-daily-completion {
+  flex-shrink: 0;
+}
+.wb-daily-completion .wb-choice-trigger {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  white-space: nowrap;
+  color: var(--link);
+  background: var(--accent-soft);
+}
+.wb-daily-completion .wb-choice-menu {
+  left: auto;
+  right: 0;
+}
 .wb-daily-compact .wb-schedule-meta {
   font-size: 10px;
   margin-top: 7px;

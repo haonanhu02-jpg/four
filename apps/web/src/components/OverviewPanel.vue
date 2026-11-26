@@ -88,7 +88,7 @@ const isToday = computed(() => board.selection.date === data.value?.asOfDate);
         </div>
         <div class="wb-stat" data-metric="weekly">
           <strong>{{ data.weekly.value === null ? '—' : `${data.weekly.value}%` }}</strong
-          ><span>所选区间推进指数</span
+          ><span>所选区间平均周进度</span
           ><small>{{ data.weekly.total }} 项 · {{ data.weekly.completed }} 项完成</small>
         </div>
         <div class="wb-stat" data-metric="daily">
@@ -114,8 +114,8 @@ const isToday = computed(() => board.selection.date === data.value?.asOfDate);
           年度、月度 = Σ（进度 × 权重）÷
           Σ权重。年度目标可选择手动填写或由全部有效下属月目标加权自动汇总；自动模式没有有效权重时进度为
           0%，原手动值保留。0 权重不参与，概览权重全为 0
-          时显示“未设置权重”。周推进指数取状态分数平均：未开始 0、进行中 50、受阻 15、已完成
-          100；它不代表实际工作量完成率。日完成率按已完成件数计算。百分比四舍五入；月度进度保持手动填写，不由日待办反推。
+          时显示“未设置权重”。周进度取有效周任务所填进度的平均值，0% 为未开始，1%–99% 为进行中，100%
+          为已完成。日完成率按已完成件数计算。百分比四舍五入；月度和周任务进度保持手动填写，不由日待办反推。
         </p>
       </details>
     </template>

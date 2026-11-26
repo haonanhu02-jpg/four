@@ -158,3 +158,39 @@ test('time text parsing does not accept invalid or negative clock ranges', () =>
   ])
     assert.equal(parseWorkMinutes(text), expected);
 });
+test('weekly numeric progress drives completion and aggregates while legacy statuses still load', () => {
+  const q = {
+    year: 2026,
+    month: '2026-11',
+    start: '2026-11-02',
+    end: '2026-11-08',
+    date: '2026-11-04',
+  };
+  for (const [status, expected] of [
+    ['todo', 0],
+    ['doing', 50],
+    ['block', 15],
+    ['done', 100],
+  ])
+    assert.equal(effectiveProgress({ type: 'weekly', status }, []), expected);
+  const week = {
+    id: 'w',
+    type: 'weekly',
+    status: 'doing',
+    progress: 37,
+    startDate: q.start,
+    endDate: q.end,
+  };
+  assert.equal(effectiveProgress(week, []), 37);
+  assert.equal(itemComplete({ ...week, progress: 100 }), true);
+  assert.equal(itemComplete({ ...week, status: 'done', progress: 99 }), false);
+  assert.equal(localInsights([week], q, q.date).overview.weekly.value, 37);
+  const doc = sampleDocument('2026-11-04');
+  Object.assign(doc.items.weekly[0], { progress: 37, status: 'doing' });
+  const normalized = normalizeDocument(doc).document;
+  assert.equal(documentFromText(documentText(doc), '2026-11-04').items.weekly[0].progress, 37);
+  assert.deepEqual(
+    documentFromTables([{ name: '工作台', rows: documentRows(doc) }], '2026-11-04').items,
+    normalized.items,
+  );
+});

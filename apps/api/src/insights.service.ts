@@ -129,7 +129,7 @@ export class InsightsService {
       const weeklyRows = await client.query(
         `SELECT count(*)::int AS total,
         count(*) FILTER (WHERE status='done')::int AS completed,
-        round(avg(CASE status WHEN 'todo' THEN 0 WHEN 'doing' THEN 50 WHEN 'block' THEN 15 ELSE 100 END)) AS value
+        round(avg(COALESCE(progress,CASE status WHEN 'todo' THEN 0 WHEN 'doing' THEN 50 WHEN 'block' THEN 15 ELSE 100 END))) AS value
         FROM weekly_tasks WHERE user_id=$1 AND current_start<=$3::date AND current_end>=$2::date
           AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated`,
         [userId, q.start, q.end],

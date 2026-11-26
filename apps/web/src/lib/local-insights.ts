@@ -13,7 +13,7 @@ const complete = (v: WorkItem) =>
   v.type === 'daily'
     ? Boolean(v.done)
     : v.type === 'weekly'
-      ? v.status === 'done'
+      ? effectiveProgress(v, []) === 100
       : v.progress === 100;
 const count = (rows: WorkItem[]) => ({
   total: rows.length,
@@ -79,12 +79,7 @@ export function localInsights(records: WorkItem[], q: WorkbenchQuery, today: str
     weekly: {
       ...count(weekly),
       value: weekly.length
-        ? Math.round(
-            weekly.reduce(
-              (sum, v) => sum + { todo: 0, doing: 50, block: 15, done: 100 }[v.status ?? 'todo'],
-              0,
-            ) / weekly.length,
-          )
+        ? Math.round(weekly.reduce((sum, v) => sum + effectiveProgress(v, all), 0) / weekly.length)
         : null,
     },
     daily: {

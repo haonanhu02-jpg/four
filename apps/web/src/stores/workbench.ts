@@ -4,6 +4,8 @@ import { computed, reactive, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import {
   API,
+  weeklyStatus,
+  legacyWeeklyProgress,
   workItemValueSchemas,
   type AuthResponse,
   type WorkItem,
@@ -218,6 +220,12 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     return writes;
   }
   function edit(item: WorkItem, values: WorkItemValues) {
+    if (item.type === 'weekly') {
+      if (values.progress !== undefined)
+        values = { ...values, status: weeklyStatus(values.progress) };
+      else if (values.status !== undefined)
+        values = { ...values, progress: legacyWeeklyProgress(values.status) };
+    }
     const changes: local.LocalChange[] = [{ item, action: 'update', values }];
     if (item.type === 'monthly') {
       for (const week of Object.values(records)) {
@@ -590,6 +598,10 @@ export const useWorkbenchStore = defineStore('workbench', () => {
           ...overrides,
         },
         now = new Date().toISOString();
+      if (type === 'weekly') {
+        values.progress ??= legacyWeeklyProgress(values.status);
+        if (overrides.progress !== undefined) values.status = weeklyStatus(values.progress);
+      }
       const item: WorkItem = {
         id: randomUUID(),
         type,
@@ -632,6 +644,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       startDate: week.startDate,
       endDate: week.endDate,
       status: week.status,
+      progress: week.progress ?? legacyWeeklyProgress(week.status),
       priority: week.priority,
     };
   }
@@ -652,6 +665,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       originalStartDate: start,
       originalEndDate: end,
       status: 'todo',
+      progress: 0,
       priority: 'P1',
       version: 0,
       createdAt: now,
