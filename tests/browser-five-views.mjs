@@ -387,7 +387,7 @@ try {
   await clickText('载入示例并预览');
   await wait('!!document.querySelector(".wb-data-preview")', 'preview');
   await clickText('确认追加');
-  await wait('Object.values(board.records).filter(v=>v.type==="daily").length===7', 'sample');
+  await wait('Object.values(board.records).filter(v=>v.type==="daily"&&!v.deletedAt).length===7', 'sample');
   if (await evaluate('!!document.querySelector(".wb-data-dialog[open]")'))
     await click('[aria-label="关闭数据管理"]');
   for (const type of ['annual', 'monthly']) {
