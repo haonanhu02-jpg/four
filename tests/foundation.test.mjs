@@ -893,7 +893,7 @@ async function insight(
   return result.body;
 }
 
-test('stage3: supplied sample produces 31/66/50, 0/7, 235 minutes and 20 execution records', async () => {
+test('stage3: supplied sample derives 31/0/0, 0/7, 235 minutes and 20 execution records', async () => {
   const account = await register('insights');
   reference = await seedReferencePlan(pool, account.id);
   const data = await insight('/overview');
@@ -909,7 +909,7 @@ test('stage3: supplied sample produces 31/66/50, 0/7, 235 minutes and 20 executi
       data.daily.completed,
       data.daily.minutes,
     ],
-    [31, 66, 50, 0, 235],
+    [31, 0, 0, 0, 235],
   );
   assert.equal(data.daily.value, 0);
   assert.equal(data.focus.id, reference.daily[0].id);
@@ -931,21 +931,21 @@ test('stage3: supplied sample produces 31/66/50, 0/7, 235 minutes and 20 executi
   assert.ok(execution.items.every((r) => r.item.type !== 'annual'));
 });
 
-test('stage3: completing daily work moves focus, increases execution counts and leaves manual progress intact', async () => {
+test('stage3: completing daily work moves focus, cascades execution counts while preserving annual manual progress', async () => {
   const cookie = users.get('insights').cookie;
   let first = (await request(`/work-items/daily/${reference.daily[0].id}`, { cookie })).body.item;
   first = await updateItem(first, { done: true }, cookie);
   const changed = await insight('/overview');
   assert.equal(changed.daily.value, 14);
   assert.equal(changed.focus.id, reference.daily[1].id);
-  assert.equal(changed.execution.completed, 1);
+  assert.equal(changed.execution.completed, 3);
   assert.equal(
     changed.monthlyGroups.find((g) => g.monthlyId === reference.monthly[0].id).completed,
-    1,
+    2,
   );
   assert.equal(changed.annual.value, 31);
-  assert.equal(changed.monthly.value, 66);
-  assert.equal(changed.weekly.value, 50);
+  assert.equal(changed.monthly.value, 20);
+  assert.equal(changed.weekly.value, 14);
   const completed = await insight('/annual-execution', {
     year: 2026,
     type: 'daily',
@@ -959,6 +959,8 @@ test('stage3: completing daily work moves focus, increases execution counts and 
   ]);
   const allDone = await insight('/overview');
   assert.equal(allDone.daily.value, 100);
+  assert.equal(allDone.monthly.value, 100);
+  assert.equal(allDone.weekly.value, 100);
   assert.equal(allDone.focus, null);
   await pool.query('UPDATE daily_tasks SET done=false,completed_at=NULL WHERE user_id=$1', [
     users.get('insights').id,
@@ -1121,8 +1123,8 @@ test('stage3: alignment identifies every rule, keeps issue and affected-item cou
     Object.values(all.counts).reduce((a, b) => a + b, 0),
   );
   assert.ok(
-    !all.items.some(
-      (i) => i.code === 'overdue' && [completeMonth.id, completeWeek.id].includes(i.item.id),
+    [completeMonth.id, completeWeek.id].every((id) =>
+      all.items.some((i) => i.code === 'overdue' && i.item.id === id),
     ),
   );
   assert.ok(
@@ -1925,7 +1927,7 @@ test('stage5: transactional legacy import, v3 roundtrip and sample metrics match
         overview.body.daily.completed,
         overview.body.daily.total,
       ],
-      [31, 66, 50, 0, 7],
+      [31, 0, 0, 0, 7],
     );
     const sample = await request('/data/sample', { cookie: account.cookie });
     assert.deepEqual(
