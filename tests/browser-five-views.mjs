@@ -137,6 +137,10 @@ try {
     await click(`[data-view=${name}]`);
     await delay(100);
   };
+  const removeGeneratedWeeks = (monthId) =>
+    evaluate(
+      `(async()=>{for(const w of Object.values(board.records).filter(v=>v.type==='weekly'&&v.parentId===${JSON.stringify(monthId)}&&!v.deletedAt))await board.remove(w);})()`,
+    );
   const theme = async (name) => {
     await evaluate(
       `(()=>{const e=document.querySelector('[aria-label="外观主题"]');e.value=${JSON.stringify(name)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`,
@@ -183,6 +187,20 @@ try {
     );
     const projectId = await evaluate(
       'document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench").add("annual",undefined,{title:"年初项目验证",note:"初始交付物",weight:100}).then(item=>item.id)',
+    );
+    const cloudMonth = await evaluate(
+      `document.querySelector('#app').__vue_app__.config.globalProperties.$pinia._s.get('workbench').add('monthly','${projectId}',{title:'自动生成周任务云端验证'}).then(item=>item.id)`,
+    );
+    await wait(
+      `fetch('/api/data/export').then(r=>r.json()).then(d=>d.items.weekly.filter(w=>w.parentId==='${cloudMonth}'&&w.title==='自动生成周任务云端验证').length===1)`,
+      'monthly and generated weekly task both sync to server',
+    );
+    await evaluate(
+      `(()=>{const b=document.querySelector('#app').__vue_app__.config.globalProperties.$pinia._s.get('workbench');b.edit(b.records['${cloudMonth}'],{title:'月目标更新同步周标题'});return b.persistAll();})()`,
+    );
+    await wait(
+      `fetch('/api/data/export').then(r=>r.json()).then(d=>d.items.weekly.some(w=>w.parentId==='${cloudMonth}'&&w.title==='月目标更新同步周标题'))`,
+      'automatic weekly title sync reaches server',
     );
     await wait(
       `fetch('/api/data/export').then(r=>r.json()).then(d=>d.items.annual.some(item=>item.id===${JSON.stringify(projectId)}))`,
@@ -255,26 +273,61 @@ try {
   assert.equal(await evaluate(`board.records['${inactiveAnnual}'].progress`), 0);
   assert.equal(await evaluate(`board.records['${splitMonth}'].progress`), 0);
   await view('weekly');
-  await wait(
-    `!!document.querySelector('[data-unplanned-month="${splitMonth}"]')`,
-    'unstarted monthly goal appears in weekly reminder',
+  const automaticWeek = await evaluate(
+    `Object.values(board.records).find(v=>v.type==='weekly'&&v.parentId==='${splitMonth}'&&!v.deletedAt).id`,
   );
-  assert.ok(
-    await evaluate(
-      `document.querySelector('[data-unplanned-month="${splitMonth}"]').getClientRects().length>0`,
-    ),
+  await wait(
+    `document.querySelector('[data-title-id="${automaticWeek}"]')?.value==='从未开始年度拆出的月目标'`,
+    'monthly creation generates a named weekly task',
   );
   assert.equal(
     await evaluate(
       'Object.values(board.records).filter(v=>v.type==="weekly"&&!v.deletedAt).length',
     ),
-    0,
-    'reminder does not generate weekly tasks',
+    1,
+    'monthly creation generates exactly one weekly task',
   );
-  await shot('unstarted-annual-split-month-in-week', '.wb-unplanned-months');
+  await shot('unstarted-annual-split-month-in-week', `[data-week-group="${automaticWeek}"]`);
+  await input(`[data-title-id="${automaticWeek}"]`, '周任务独立改名');
+  await view('monthly');
+  await input(`[data-title-id="${splitMonth}"]`, '月目标再次改名');
+  await wait('!board.hasUnpersisted', 'automatic creation and renaming persisted');
+  await reloadPage();
+  await evaluate(
+    'window.board=document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench");true',
+  );
+  assert.equal(await evaluate(`board.records['${automaticWeek}'].title`), '周任务独立改名');
+  assert.equal(
+    await evaluate(
+      'Object.values(board.records).filter(v=>v.type==="weekly"&&!v.deletedAt).length',
+    ),
+    1,
+  );
+  await removeGeneratedWeeks(splitMonth);
   await evaluate(
     `board.remove(board.records['${splitMonth}']).then(()=>board.remove(board.records['${inactiveAnnual}']))`,
   );
+  const failedPair = await evaluate(`(async()=>{
+    const original=IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put=function(row,...args){if(this.name==='items'&&row.item?.type==='weekly')throw new DOMException('test quota failure','QuotaExceededError');return original.call(this,row,...args);};
+    try{const m=await board.add('monthly',undefined,{title:'原子保存失败重试验证'});return {month:m.id,week:Object.values(board.records).find(w=>w.type==='weekly'&&w.parentId===m.id).id};}
+    finally{IDBObjectStore.prototype.put=original;}
+  })()`);
+  assert.equal(await evaluate('board.hasUnpersisted'), true);
+  const cachedPair = () =>
+    evaluate(
+      `new Promise((resolve,reject)=>{const r=indexedDB.open('four-layer-workbench');r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,q=db.transaction('items').objectStore('items').getAll();q.onsuccess=()=>{db.close();resolve(q.result.filter(v=>[${JSON.stringify(failedPair.month)},${JSON.stringify(failedPair.week)}].includes(v.item.id)).length);};};})`,
+    );
+  assert.equal(
+    await cachedPair(),
+    0,
+    'failure writing generated week rolls back monthly creation too',
+  );
+  await evaluate('board.retryLocal()');
+  assert.equal(await evaluate('board.hasUnpersisted'), false);
+  assert.equal(await cachedPair(), 2, 'retry saves the complete monthly-weekly pair');
+  await removeGeneratedWeeks(failedPair.month);
+  await evaluate(`board.remove(board.records['${failedPair.month}']);board.error='';true`);
   await clickText('数据管理');
   await clickText('载入示例并预览');
   await wait('!!document.querySelector(".wb-data-preview")', 'preview');
@@ -337,6 +390,7 @@ try {
       await evaluate('document.querySelector(".wb-goals-table tbody tr").dataset.itemId'),
       added,
     );
+    if (type === 'monthly') await removeGeneratedWeeks(added);
     await evaluate(`board.remove(board.records[${JSON.stringify(added)}])`);
   }
   await view('annual');
@@ -486,6 +540,7 @@ try {
     `document.querySelector('${monthProgressSelector}').textContent==='60%'`,
     'monthly summary survives reload',
   );
+  for (const id of summaryMonths) await removeGeneratedWeeks(id);
   await evaluate(
     `(async()=>{for(const id of ${JSON.stringify(summaryMonths.slice(0, 4))})await board.remove(board.records[id]);await board.remove(board.records['${summaryGoal}']);})()`,
   );
@@ -544,6 +599,7 @@ try {
   const month = await evaluate(
     'board.add("monthly",undefined,{title:"待排本周的月目标"}).then(v=>v.id)',
   );
+  await removeGeneratedWeeks(month);
   await wait(
     `!!document.querySelector('[data-unplanned-month="${month}"]')`,
     'monthly goal automatically in week view',
@@ -559,7 +615,7 @@ try {
     initialWeekCount,
     'showing monthly reminders does not create weekly records',
   );
-  await click(`[data-unplanned-month="${month}"] .wb-button`);
+  await click('[data-generate-unplanned]');
   await wait(
     `!document.querySelector('[data-unplanned-month="${month}"]')`,
     'scheduled monthly goal leaves reminder',
@@ -568,6 +624,12 @@ try {
     `Object.values(board.records).find(v=>v.type==='weekly'&&v.parentId==='${month}'&&!v.deletedAt).id`,
   );
   assert.equal(await weeklyTotal(), initialWeekCount + 1);
+  await evaluate('Promise.all([board.arrangeUnplannedMonths(),board.arrangeUnplannedMonths()])');
+  assert.equal(
+    await weeklyTotal(),
+    initialWeekCount + 1,
+    'repeated backfill skips existing weekly tasks',
+  );
   await input(`[data-item-id="${plannedWeek}"] [aria-label="周任务标题"]`, '为月目标安排本周');
   await view('monthly');
   await view('weekly');
@@ -579,6 +641,7 @@ try {
   const pendingMonth = await evaluate(
     'board.add("monthly",undefined,{title:"仍待安排的月目标"}).then(v=>v.id)',
   );
+  await removeGeneratedWeeks(pendingMonth);
   const orphans = await evaluate(`(async()=>{
     const ids=[];
     for(const [title,done] of [['未挂周任务验证一',false],['未挂周任务验证二',false],['已完成的未挂待办',true]])

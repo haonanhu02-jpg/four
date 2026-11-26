@@ -173,28 +173,34 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     if (!isGuest.value) timer = setTimeout(() => void sync(), 600);
   }
   function persist(item: WorkItem, action: local.Action, values: WorkItemValues = {}) {
-    const owner = userId.value,
-      token = randomUUID(),
-      previous = memory[item.id];
-    memory[item.id] = {
-      item: { ...item },
-      values: { ...previous?.values, ...values },
-      action,
-      token,
-    };
-    if (!records[item.id]) records[item.id] = { ...item };
-    Object.assign(records[item.id]!, values);
-    if (action === 'delete') records[item.id]!.deletedAt = new Date().toISOString();
-    if (action === 'restore') records[item.id]!.deletedAt = null;
-    entries[item.id] = { state: 'pending', message: '正在保存到本机', pending: values };
+    return persistMany([{ item, action, values }]);
+  }
+  function persistMany(changes: local.LocalChange[]) {
+    const owner = userId.value;
+    const pending = changes.map(({ item, action, values }) => {
+      const token = randomUUID(),
+        previous = memory[item.id];
+      memory[item.id] = {
+        item: { ...item },
+        values: { ...previous?.values, ...values },
+        action,
+        token,
+      };
+      if (!records[item.id]) records[item.id] = { ...item };
+      Object.assign(records[item.id]!, values);
+      if (action === 'delete') records[item.id]!.deletedAt = new Date().toISOString();
+      if (action === 'restore') records[item.id]!.deletedAt = null;
+      entries[item.id] = { state: 'pending', message: '正在保存到本机', pending: values };
+      return { item: { ...item }, action, values, token };
+    });
     persisting.value++;
     rebuild();
-    const snapshot = { ...item };
     writes = writes
       .then(async () => {
-        await local.enqueue(owner, snapshot, action, values);
+        await local.enqueueBatch(owner, pending);
         if (owner !== userId.value) return;
-        if (memory[item.id]?.token === token) delete memory[item.id];
+        for (const { item, token } of pending)
+          if (memory[item.id]?.token === token) delete memory[item.id];
         storageError.value = '';
         await reloadLocal(owner);
         channel?.postMessage(owner);
@@ -212,7 +218,26 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     return writes;
   }
   function edit(item: WorkItem, values: WorkItemValues) {
-    void persist(item, 'update', values);
+    const changes: local.LocalChange[] = [{ item, action: 'update', values }];
+    if (item.type === 'monthly') {
+      for (const week of Object.values(records)) {
+        if (
+          week.type !== 'weekly' ||
+          week.parentId !== item.id ||
+          week.deletedAt ||
+          week.archivedAt ||
+          week.terminated
+        )
+          continue;
+        const inherited: WorkItemValues = {};
+        for (const field of ['title', 'note'] as const)
+          if (values[field] !== undefined && week[field] === item[field])
+            inherited[field] = values[field];
+        if (Object.keys(inherited).length)
+          changes.push({ item: week, action: 'update', values: inherited });
+      }
+    }
+    void persistMany(changes);
   }
   async function persistAll() {
     await writes;
@@ -221,7 +246,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   async function retryLocal() {
     await writes;
     const pending = Object.values(memory).map((v) => ({ ...v }));
-    for (const draft of pending) await persist(draft.item, draft.action, draft.values);
+    if (pending.length) await persistMany(pending);
     if (!Object.keys(memory).length) {
       try {
         await reloadLocal();
@@ -581,12 +606,101 @@ export const useWorkbenchStore = defineStore('workbench', () => {
         item.originalEndDate = item.endDate;
       }
       if (type === 'daily') item.originalDate = item.date;
-      await persist(item, 'create', values);
+      if (type === 'monthly' && !item.terminated && (item.progress ?? 0) < 100) {
+        const week = monthlyWeek(item);
+        await persistMany([
+          { item, action: 'create', values },
+          { item: week, action: 'create', values: weeklyValues(week) },
+        ]);
+      } else await persist(item, 'create', values);
       schedule();
       return records[item.id] ?? null;
     } catch (caught) {
       createError.value = errorMessage(caught);
       return null;
+    } finally {
+      creating.value = false;
+    }
+  }
+  function weeklyValues(week: WorkItem): WorkItemValues {
+    return {
+      title: week.title,
+      note: week.note,
+      parentId: week.parentId,
+      startDate: week.startDate,
+      endDate: week.endDate,
+      status: week.status,
+      priority: week.priority,
+    };
+  }
+  function monthlyWeek(month: WorkItem): WorkItem {
+    const inMonth =
+      month.month! >= selection.start.slice(0, 7) && month.month! <= selection.end.slice(0, 7);
+    const start = inMonth ? selection.start : monday(`${month.month}-01`);
+    const end = inMonth ? selection.end : addDays(start, 6);
+    const now = new Date().toISOString();
+    return {
+      id: randomUUID(),
+      type: 'weekly',
+      title: month.title,
+      note: month.note,
+      parentId: month.id,
+      startDate: start,
+      endDate: end,
+      originalStartDate: start,
+      originalEndDate: end,
+      status: 'todo',
+      priority: 'P1',
+      version: 0,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      archivedAt: null,
+      rolloverCount: 0,
+    };
+  }
+  async function arrangeUnplannedMonths() {
+    if (creating.value) return;
+    creating.value = true;
+    try {
+      if (!(await persistAll())) return;
+      const months = Object.values(records).filter(
+        (m) =>
+          m.type === 'monthly' &&
+          !m.deletedAt &&
+          !m.archivedAt &&
+          !m.terminated &&
+          (m.progress ?? 0) < 100 &&
+          (m.month === selection.month ||
+            (m.month! >= selection.start.slice(0, 7) && m.month! <= selection.end.slice(0, 7))),
+      );
+      const changes: local.LocalChange[] = [];
+      for (const month of months) {
+        if (
+          Object.values(records).some(
+            (w) =>
+              w.type === 'weekly' &&
+              w.parentId === month.id &&
+              !w.deletedAt &&
+              !w.archivedAt &&
+              !w.terminated &&
+              w.startDate! <= selection.end &&
+              w.endDate! >= selection.start,
+          )
+        )
+          continue;
+        const week = monthlyWeek(month);
+        // Backfill explicitly targets the selected interval, including cross-month plans.
+        Object.assign(week, {
+          startDate: selection.start,
+          endDate: selection.end,
+          originalStartDate: selection.start,
+          originalEndDate: selection.end,
+        });
+        changes.push({ item: week, action: 'create', values: weeklyValues(week) });
+      }
+      if (changes.length) await persistMany(changes);
+      if (!hasUnpersisted.value) notice.value = `已为待安排月目标生成 ${changes.length} 条周任务`;
     } finally {
       creating.value = false;
     }
@@ -713,6 +827,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     discard,
     copyDraft,
     add,
+    arrangeUnplannedMonths,
     finishCreate,
     flushAll,
     persistAll,

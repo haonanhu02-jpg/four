@@ -418,6 +418,9 @@ function changeState(item: WorkItem, value: string) {
       </tbody>
     </table>
     <p v-else class="wb-insight-empty">当前筛选没有匹配目标。</p>
+    <p v-if="type === 'monthly'" class="wb-goal-state-help">
+      新增未完成月目标时，自动生成一条同名周任务并保留月目标关联；可继续拆分更多周任务。单独修改周任务标题后，保留你的修改。
+    </p>
     <p v-if="rows.length" class="wb-goal-state-help">
       状态随进度更新：0% 未开始，1%–99% 进行中，100%
       已完成。可从状态菜单开始执行或标记完成；自动汇总时修改月目标进度即可，手动操作会明确切换进度模式。

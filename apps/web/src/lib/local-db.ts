@@ -201,104 +201,118 @@ export function project(items: WorkItem[], commands: Command[]): WorkItem[] {
     if (item.parentId && map.get(item.parentId)?.deletedAt) item.parentId = null;
   return [...map.values()];
 }
-export async function enqueue(
+export interface LocalChange {
+  item: WorkItem;
+  action: Action;
+  values: WorkItemValues;
+}
+export async function enqueueBatch(owner: string, changes: LocalChange[]): Promise<void> {
+  await transaction(['items', 'commands'], 'readwrite', async (tx) => {
+    for (const change of changes)
+      await enqueueInTransaction(tx, owner, change.item, change.action, change.values);
+  });
+}
+export function enqueue(
+  owner: string,
+  item: WorkItem,
+  action: Action,
+  values: WorkItemValues = {},
+) {
+  return enqueueBatch(owner, [{ item, action, values }]);
+}
+async function enqueueInTransaction(
+  tx: IDBTransaction,
   owner: string,
   item: WorkItem,
   action: Action,
   values: WorkItemValues = {},
 ): Promise<void> {
-  await transaction(['items', 'commands'], 'readwrite', async (tx) => {
-    const cache = tx.objectStore('items'),
-      queue = tx.objectStore('commands');
-    const key = `${owner}:${item.id}`;
-    if (owner === GUEST) {
-      const current = ((await value(cache.get(key))) as Cached | undefined)?.item ?? item;
-      const next = {
-        ...current,
-        ...values,
-        version: current.version + 1,
-        updatedAt: new Date().toISOString(),
-        deletedAt:
-          action === 'delete'
-            ? new Date().toISOString()
-            : action === 'restore'
-              ? null
-              : current.deletedAt,
-      };
-      await value(cache.put(plain({ key, owner, item: next })));
-      if (action === 'delete') {
-        const all = (await value(cache.index('owner').getAll(owner))) as Cached[];
-        for (const child of all)
-          if (child.item.parentId === item.id && !child.item.deletedAt) {
-            child.item.parentId = null;
-            child.item.version++;
-            await value(cache.put(child));
-          }
-      }
-      return;
-    }
-    if (!(await value(cache.get(key)))) await value(cache.put(plain({ key, owner, item })));
-    const all = ((await value(queue.index('owner').getAll(owner))) as Command[]).sort(
-      (a, b) => a.order - b.order,
-    );
-    const mine = all.filter((c) => c.itemId === item.id),
-      last = mine.at(-1);
-    const rejected = mine.find((c) => c.rejected);
-    if (action === 'update' && rejected) {
-      const merged = Object.assign({}, ...mine.map((c) => c.values), values) as WorkItemValues;
-      for (const c of mine) await value(queue.delete(c.operationId));
-      await value(
-        queue.put(
-          plain({
-            ...rejected,
-            operationId: randomUUID(),
-            values: merged,
-            state: 'queued',
-            sent: false,
-            rejected: false,
-            message: '',
-            readyAt: Date.now() + 550,
-          }),
-        ),
-      );
-      return;
-    }
-    if (
-      action === 'update' &&
-      last &&
-      last.tab === clientTab &&
-      !last.sent &&
-      last.state === 'queued' &&
-      ['create', 'update'].includes(last.action)
-    ) {
-      Object.assign(last.values, values);
-      last.readyAt = Date.now() + 550;
-      await value(queue.put(plain(last)));
-      return;
-    }
-    const baseVersion =
-      last?.tab === clientTab
-        ? last.action === 'create'
-          ? 1
-          : last.baseVersion + 1
-        : item.version;
-    const command: Command = {
-      operationId: randomUUID(),
-      owner,
-      tab: clientTab,
-      itemId: item.id,
-      type: item.type,
-      action,
-      values,
-      baseVersion,
-      order: Math.max(Date.now(), (all.at(-1)?.order ?? 0) + 1),
-      readyAt: Date.now() + 550,
-      state: 'queued',
-      sent: false,
-      message: '',
+  const cache = tx.objectStore('items'),
+    queue = tx.objectStore('commands');
+  const key = `${owner}:${item.id}`;
+  if (owner === GUEST) {
+    const current = ((await value(cache.get(key))) as Cached | undefined)?.item ?? item;
+    const next = {
+      ...current,
+      ...values,
+      version: current.version + 1,
+      updatedAt: new Date().toISOString(),
+      deletedAt:
+        action === 'delete'
+          ? new Date().toISOString()
+          : action === 'restore'
+            ? null
+            : current.deletedAt,
     };
-    await value(queue.put(plain(command)));
-  });
+    await value(cache.put(plain({ key, owner, item: next })));
+    if (action === 'delete') {
+      const all = (await value(cache.index('owner').getAll(owner))) as Cached[];
+      for (const child of all)
+        if (child.item.parentId === item.id && !child.item.deletedAt) {
+          child.item.parentId = null;
+          child.item.version++;
+          await value(cache.put(child));
+        }
+    }
+    return;
+  }
+  if (!(await value(cache.get(key)))) await value(cache.put(plain({ key, owner, item })));
+  const all = ((await value(queue.index('owner').getAll(owner))) as Command[]).sort(
+    (a, b) => a.order - b.order,
+  );
+  const mine = all.filter((c) => c.itemId === item.id),
+    last = mine.at(-1);
+  const rejected = mine.find((c) => c.rejected);
+  if (action === 'update' && rejected) {
+    const merged = Object.assign({}, ...mine.map((c) => c.values), values) as WorkItemValues;
+    for (const c of mine) await value(queue.delete(c.operationId));
+    await value(
+      queue.put(
+        plain({
+          ...rejected,
+          operationId: randomUUID(),
+          values: merged,
+          state: 'queued',
+          sent: false,
+          rejected: false,
+          message: '',
+          readyAt: Date.now() + 550,
+        }),
+      ),
+    );
+    return;
+  }
+  if (
+    action === 'update' &&
+    last &&
+    last.tab === clientTab &&
+    !last.sent &&
+    last.state === 'queued' &&
+    ['create', 'update'].includes(last.action)
+  ) {
+    Object.assign(last.values, values);
+    last.readyAt = Date.now() + 550;
+    await value(queue.put(plain(last)));
+    return;
+  }
+  const baseVersion =
+    last?.tab === clientTab ? (last.action === 'create' ? 1 : last.baseVersion + 1) : item.version;
+  const command: Command = {
+    operationId: randomUUID(),
+    owner,
+    tab: clientTab,
+    itemId: item.id,
+    type: item.type,
+    action,
+    values,
+    baseVersion,
+    order: Math.max(Date.now(), (all.at(-1)?.order ?? 0) + 1),
+    readyAt: Date.now() + 550,
+    state: 'queued',
+    sent: false,
+    message: '',
+  };
+  await value(queue.put(plain(command)));
 }
 export async function commandPut(c: Command) {
   await transaction(['commands'], 'readwrite', async (tx) => {

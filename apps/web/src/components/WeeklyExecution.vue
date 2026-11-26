@@ -179,7 +179,7 @@ watch(
       </button>
     </div>
     <p class="wb-month-sources">
-      月目标自动带入：本期 {{ monthGoals.length }} 项，已安排本周任务
+      新建月目标会自动生成关联周任务。本期月目标 {{ monthGoals.length }} 项，已安排本周任务
       {{ monthGoals.length - unplannedMonths.length }} 项，待安排 {{ unplannedMonths.length }} 项。
       待安排月目标列在周任务下方，可直接安排本周任务。
     </p>
@@ -277,7 +277,16 @@ watch(
     </button>
     <details v-if="unplannedMonths.length" class="wb-unplanned-months" open>
       <summary>本周未安排周任务的月目标 {{ unplannedMonths.length }} 项</summary>
-      <p class="wb-month-planning-note">这些月目标已自动带入周视图，可直接安排并关联本周任务。</p>
+      <p class="wb-month-planning-note">以前创建或本周尚未安排的月目标，可一键补齐同名周任务。</p>
+      <button
+        type="button"
+        class="wb-button"
+        :disabled="board.creating"
+        data-generate-unplanned
+        @click="board.arrangeUnplannedMonths()"
+      >
+        为待安排月目标生成本周任务
+      </button>
       <article v-for="goal in unplannedMonths" :key="goal.id" :data-unplanned-month="goal.id">
         <div>
           <strong>{{ goal.title || '未命名月目标' }}</strong>
