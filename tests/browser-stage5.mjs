@@ -303,11 +303,11 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     );
     await persisted();
     const annual = await evaluate(
-      'document.querySelectorAll("tr[data-type=annual] [data-title-id]")[4].getAttribute("data-title-id")',
+      'document.querySelector("tr[data-type=annual] [data-title-id]").getAttribute("data-title-id")',
     );
     await set('[data-title-id="' + annual + '"]', '离线新增年度');
     await persisted();
-    await click('tr[data-type=annual]:last-child .wb-table-row-actions .wb-link');
+    await click('[data-item-id="' + annual + '"] .wb-table-row-actions .wb-link');
     await waitFor(
       'document.querySelectorAll("tr[data-type=monthly]").length===7',
       'offline month created',
@@ -320,10 +320,10 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     );
     await set('[data-title-id="' + monthly + '"]', '离线新增月度');
     await persisted();
-    await click('[data-item-id="' + monthly + '"] .wb-table-row-actions .wb-link');
+    await click('[data-view=weekly]');
     await waitFor(
       'document.querySelectorAll(".wb-item-weekly").length===8',
-      'offline week created',
+      'offline weekly task automatically created with monthly goal',
     );
     await persisted();
     const weekly = await evaluate(
@@ -331,6 +331,8 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
         JSON.stringify(monthly) +
         ').id',
     );
+    if ((await evaluate('board.records[' + JSON.stringify(weekly) + '].title')) !== '离线新增月度')
+      throw Error('Generated offline weekly task did not inherit monthly title');
     await set('[data-title-id="' + weekly + '"]', '离线新增周任务');
     await persisted();
     await evaluate(
