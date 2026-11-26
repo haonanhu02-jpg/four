@@ -306,6 +306,42 @@ try {
     1,
     'monthly creation generates exactly one weekly task',
   );
+  const cascadeDay = await evaluate(
+    `board.add('daily','${automaticWeek}',{title:'日完成驱动四层验证',done:false}).then(v=>v.id)`,
+  );
+  await evaluate(
+    `board.edit(board.records['${inactiveAnnual}'],{progressMode:'auto'});board.edit(board.records['${cascadeDay}'],{done:true})`,
+  );
+  await wait(
+    `document.querySelector('[data-item-id="${automaticWeek}"] .wb-progress strong').textContent.trim()==='100%'`,
+    'daily completion immediately completes weekly progress',
+  );
+  await view('monthly');
+  await wait(
+    `document.querySelector('[data-item-id="${splitMonth}"] .wb-table-progress strong').textContent.trim()==='100%'`,
+    'weekly completion immediately completes monthly progress',
+  );
+  await view('annual');
+  await wait(
+    `document.querySelector('[data-auto-progress="${inactiveAnnual}"]').textContent.trim()==='100%'`,
+    'daily completion reaches weighted annual progress',
+  );
+  await wait('!board.hasUnpersisted', 'cascade completion persisted');
+  await reloadPage();
+  await evaluate(
+    'window.board=document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench");true',
+  );
+  await wait(
+    `document.querySelector('[data-auto-progress="${inactiveAnnual}"]').textContent.trim()==='100%'`,
+    'cascade survives reload',
+  );
+  await evaluate(`board.edit(board.records['${cascadeDay}'],{done:false})`);
+  await wait(
+    `document.querySelector('[data-auto-progress="${inactiveAnnual}"]').textContent.trim()==='0%'`,
+    'undo daily completion updates ancestors',
+  );
+  await evaluate(`board.remove(board.records['${cascadeDay}'])`);
+  await view('weekly');
   await shot('unstarted-annual-split-month-in-week', `[data-week-group="${automaticWeek}"]`);
   await input(`[data-title-id="${automaticWeek}"]`, '周任务独立改名');
   await view('monthly');
@@ -494,7 +530,7 @@ try {
       {title:'删除月目标',month:${JSON.stringify(selectedMonth)},progress:100,weight:100}
     ];
     const ids=[];for(const value of values)ids.push((await board.add('monthly','${summaryGoal}',value)).id);
-    await board.remove(board.records[ids[4]]);return ids;
+    await board.remove(board.records[ids[4]]);for(const w of Object.values(board.records).filter(v=>v.type==='weekly'&&ids.includes(v.parentId)&&!v.deletedAt))await board.remove(w);return ids;
   })()`);
   const monthProgressSelector = `[data-month-progress="${summaryGoal}"] strong`;
   const completionSelector = `[data-month-completion="${summaryGoal}"]`;

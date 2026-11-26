@@ -63,13 +63,15 @@ const extraWeeks = computed(() => {
 const weekCandidates = computed(() =>
   [...weeks.value, ...extraWeeks.value].sort(
     (a, b) =>
-      (a.terminated ? 2 : itemComplete(a) ? 1 : 0) - (b.terminated ? 2 : itemComplete(b) ? 1 : 0) ||
-      newestFirst(a, b),
+      (a.terminated ? 2 : itemComplete(a, all.value) ? 1 : 0) -
+        (b.terminated ? 2 : itemComplete(b, all.value) ? 1 : 0) || newestFirst(a, b),
   ),
 );
 const weekMatches = (v: WorkItem, key: string) =>
   key === 'all' ||
-  (key === 'incomplete' ? !v.terminated && !itemComplete(v) : itemState(v) === key);
+  (key === 'incomplete'
+    ? !v.terminated && !itemComplete(v, all.value)
+    : itemState(v, all.value) === key);
 const displayedWeeks = computed(() =>
   weekCandidates.value.filter((v) => weekMatches(v, weekFilter.value)),
 );

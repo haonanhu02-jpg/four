@@ -18,7 +18,7 @@ import { DatabaseService } from './database.service';
 import { ApiException } from './http';
 import { HistoryService } from './history.service';
 
-import { DEFINITIONS, item } from './work-item-model';
+import { DEFINITIONS, item, progressSelect } from './work-item-model';
 export { item } from './work-item-model';
 
 @Injectable()
@@ -43,7 +43,7 @@ export class WorkItemsService {
         ];
         if (!ids.length) continue;
         const rows = await client.query(
-          `SELECT * FROM ${DEFINITIONS[parentType].table} WHERE user_id=$1 AND id=ANY($2::uuid[])`,
+          `SELECT ${progressSelect(parentType)} FROM ${DEFINITIONS[parentType].table} WHERE user_id=$1 AND id=ANY($2::uuid[])`,
           [userId, ids],
         );
         for (const row of rows.rows) {
@@ -86,7 +86,7 @@ export class WorkItemsService {
       parameters,
     );
     const rows = await client.query(
-      `SELECT * FROM ${DEFINITIONS[type].table} WHERE ${where} ORDER BY created_at ASC,id ASC LIMIT $${parameters.length + 1} OFFSET $${parameters.length + 2}`,
+      `SELECT ${progressSelect(type)} FROM ${DEFINITIONS[type].table} WHERE ${where} ORDER BY created_at ASC,id ASC LIMIT $${parameters.length + 1} OFFSET $${parameters.length + 2}`,
       [...parameters, q.limit, q.offset],
     );
     const items = rows.rows.map((r) => item(type, r));
@@ -110,7 +110,7 @@ export class WorkItemsService {
     return this.database.withTransaction(async (client) => {
       await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
       const rows = await client.query(
-        `SELECT * FROM ${DEFINITIONS[type].table} WHERE user_id=$1 AND id=$2 AND deleted_at IS NULL`,
+        `SELECT ${progressSelect(type)} FROM ${DEFINITIONS[type].table} WHERE user_id=$1 AND id=$2 AND deleted_at IS NULL`,
         [userId, id],
       );
       if (!rows.rows[0]) throw new ApiException('NOT_FOUND', '事项不存在或已被删除，请刷新', 404);

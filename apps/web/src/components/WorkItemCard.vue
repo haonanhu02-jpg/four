@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import {
   effectiveProgress,
+  hasProgressChildren,
   weeklyStatus,
   parseWorkMinutes,
   type WorkItem,
@@ -45,6 +46,9 @@ const name = computed(
 const entry = computed(() => store.entries[props.item.id]);
 const chain = computed(() => store.lineage(props.item));
 const progress = computed(() => effectiveProgress(props.item, Object.values(store.records)));
+const childAutomatic = computed(() =>
+  hasProgressChildren(props.item, Object.values(store.records)),
+);
 const timeMinutes = computed(() => parseWorkMinutes(props.item.time ?? ''));
 const child = computed<WorkItemType | null>(
   () =>
@@ -175,10 +179,13 @@ function addSibling() {
         }}</span
         ><strong>{{ progress }}%</strong>
       </div>
+      <small v-if="childAutomatic"
+        >按关联{{ item.type === 'weekly' ? '日待办完成比例' : '周任务平均进度' }}自动汇总</small
+      >
       <div class="wb-progress-track"><span :style="{ width: `${progress}%` }" /></div>
       <input
         type="range"
-        v-if="item.type !== 'annual' || item.progressMode !== 'auto'"
+        v-if="!childAutomatic && (item.type !== 'annual' || item.progressMode !== 'auto')"
         min="0"
         max="100"
         step="1"
@@ -250,6 +257,7 @@ function addSibling() {
             step="1"
             :value="progress"
             aria-label="周任务进度"
+            :disabled="childAutomatic"
             @input="number('progress', $event)"
             @blur="store.save(item.id)"
           />%</label
@@ -267,9 +275,13 @@ function addSibling() {
           />
         </div>
         <div class="wb-field">
-          状态<ChoicePicker
+          状态<span v-if="childAutomatic">{{
+            progress === 100 ? '已完成' : progress === 0 ? '未开始' : '进行中'
+          }}</span
+          ><ChoicePicker
             :model-value="item.terminated ? 'terminated' : weeklyStatus(progress)"
             label="周任务状态"
+            v-if="!childAutomatic"
             :options="[
               { value: 'todo', label: '未开始' },
               { value: 'doing', label: '进行中' },

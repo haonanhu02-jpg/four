@@ -17,18 +17,26 @@ export function weightedProgress(
     : null;
 }
 export function effectiveProgress(item: WorkItem, records: WorkItem[]): number {
-  if (
-    item.type === 'annual' &&
-    item.progressMode === 'auto' &&
-    item.calculatedProgress !== undefined
-  )
-    return item.calculatedProgress;
+  if (item.calculatedProgress !== undefined && records.length === 0) return item.calculatedProgress;
+  const childType = { annual: 'monthly', monthly: 'weekly', weekly: 'daily', daily: null }[
+    item.type
+  ];
+  const children = records.filter(
+    (v) => v.type === childType && v.parentId === item.id && activeItem(v),
+  );
+  if (item.type === 'weekly' && children.length)
+    return Math.round((100 * children.filter((v) => v.done).length) / children.length);
+  if (item.type === 'monthly' && children.length)
+    return Math.round(
+      children.reduce((sum, v) => sum + effectiveProgress(v, records), 0) / children.length,
+    );
   if (item.type === 'annual' && item.progressMode === 'auto')
     return (
       weightedProgress(
         records.filter(
           (child) => child.type === 'monthly' && child.parentId === item.id && activeItem(child),
         ),
+        (child) => effectiveProgress(child, records),
       ) ?? 0
     );
   if (item.type === 'weekly') return item.progress ?? legacyWeeklyProgress(item.status);
@@ -61,4 +69,11 @@ export function parseWorkMinutes(source: string): number | null {
   if (!match) return null;
   const minutes = Math.round(Number(match[1]) * (/^(h|小时|时)$/i.test(match[2] ?? '') ? 60 : 1));
   return minutes <= 1440 ? minutes : null;
+}
+
+export function hasProgressChildren(item: WorkItem, records: WorkItem[]): boolean {
+  const type = item.type === 'monthly' ? 'weekly' : item.type === 'weekly' ? 'daily' : null;
+  return (
+    type !== null && records.some((v) => v.type === type && v.parentId === item.id && activeItem(v))
+  );
 }

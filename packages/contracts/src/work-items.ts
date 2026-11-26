@@ -128,7 +128,7 @@ export interface WorkItemValues {
   done?: boolean;
 }
 export interface WorkItem extends WorkItemValues {
-  /** Only present in immutable historical snapshots. */
+  /** Derived progress on server reads and immutable historical snapshots. */
   calculatedProgress?: number;
   id: string;
   type: WorkItemType;

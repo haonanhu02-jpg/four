@@ -1,5 +1,13 @@
 import type { WorkItem, WorkItemType } from '@workbench/contracts';
 import { legacyWeeklyProgress } from '@workbench/contracts';
+export const progressSelect = (type: WorkItemType) =>
+  type === 'weekly'
+    ? `*,weekly_progress_value(user_id,id,coalesce(progress,CASE status WHEN 'todo' THEN 0 WHEN 'doing' THEN 50 WHEN 'block' THEN 15 ELSE 100 END)) AS calculated_progress`
+    : type === 'monthly'
+      ? '*,monthly_progress_value(user_id,id,progress) AS calculated_progress'
+      : type === 'annual'
+        ? '*,annual_progress_value(user_id,id,progress_mode,progress) AS calculated_progress'
+        : '*';
 export const DEFINITIONS = {
   annual: { table: 'annual_goals', parent: null, parentColumn: null, child: 'monthly' },
   monthly: {
@@ -37,6 +45,8 @@ export function item(type: WorkItemType, row: Row): WorkItem {
     archivedAt: row.archived_at ? stamp(row.archived_at) : null,
     rolloverCount: Number(row.rollover_count ?? 0),
   };
+  if (row.calculated_progress !== undefined)
+    result.calculatedProgress = Number(row.calculated_progress);
   if (type === 'annual') {
     result.year = Number(row.year);
     result.progressMode = (row.progress_mode ?? 'manual') as 'manual' | 'auto';

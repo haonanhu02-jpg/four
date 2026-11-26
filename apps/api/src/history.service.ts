@@ -73,7 +73,16 @@ export class HistoryService {
   ) {}
   async frozen(client: PoolClient, userId: string, value: WorkItem): Promise<FrozenItem> {
     const freezeProgress = async (v: WorkItem) => {
-      if (v.type !== 'annual' || v.progressMode !== 'auto') return v;
+      if (v.type === 'daily') return v;
+      if (v.type !== 'annual') {
+        const rows = await client.query(`SELECT ${v.type}_progress_value($1,$2,$3) AS progress`, [
+          userId,
+          v.id,
+          v.progress ?? 0,
+        ]);
+        return { ...v, calculatedProgress: Number(rows.rows[0].progress) };
+      }
+      if (v.progressMode !== 'auto') return v;
       const rows = await client.query('SELECT annual_progress_value($1,$2,$3,$4) AS progress', [
         userId,
         v.id,
@@ -143,8 +152,8 @@ export class HistoryService {
           : type === 'monthly'
             ? `LEFT JOIN annual_goals a ON a.id=t.annual_goal_id AND a.user_id=t.user_id`
             : type === 'weekly'
-              ? `LEFT JOIN monthly_goals m ON m.id=t.monthly_goal_id AND m.user_id=t.user_id LEFT JOIN annual_goals a ON a.id=m.annual_goal_id AND a.user_id=t.user_id`
-              : `LEFT JOIN weekly_tasks w ON w.id=t.weekly_task_id AND w.user_id=t.user_id LEFT JOIN monthly_goals m ON m.id=w.monthly_goal_id AND m.user_id=t.user_id LEFT JOIN annual_goals a ON a.id=m.annual_goal_id AND a.user_id=t.user_id`;
+              ? `LEFT JOIN monthly_progress_read m ON m.id=t.monthly_goal_id AND m.user_id=t.user_id LEFT JOIN annual_goals a ON a.id=m.annual_goal_id AND a.user_id=t.user_id`
+              : `LEFT JOIN weekly_progress_read w ON w.id=t.weekly_task_id AND w.user_id=t.user_id LEFT JOIN monthly_progress_read m ON m.id=w.monthly_goal_id AND m.user_id=t.user_id LEFT JOIN annual_goals a ON a.id=m.annual_goal_id AND a.user_id=t.user_id`;
       const ancestors =
         type === 'annual'
           ? `'[]'::jsonb`
@@ -176,7 +185,7 @@ export class HistoryService {
       await client.query(
         `INSERT INTO period_snapshot_items(snapshot_id,user_id,item_type,item_id,title,completed,data)
         SELECT $1,t.user_id,'${type}',t.id,t.title,(NOT t.terminated AND (${done})),jsonb_build_object('record',${record},'ancestors',${ancestors})
-        FROM ${def.table} t ${joins} WHERE t.user_id=$2 AND t.deleted_at IS NULL AND t.archived_at IS NULL AND ${condition}`,
+        FROM ${type === 'weekly' ? 'weekly_progress_read' : type === 'monthly' ? 'monthly_progress_read' : def.table} t ${joins} WHERE t.user_id=$2 AND t.deleted_at IS NULL AND t.archived_at IS NULL AND ${condition}`,
         [id, userId, p.start, p.end],
       );
     }

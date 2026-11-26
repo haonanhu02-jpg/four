@@ -2350,3 +2350,57 @@ test('terminated items retain data, stop rollover and preserve immutable annual 
   assert.deepEqual(isolated.body.projects, []);
   assert.deepEqual(isolated.body.changes, []);
 });
+
+test('daily completion derives weekly/monthly/annual reads and overview without changing parent versions', async () => {
+  const account = await featureAccount('cascade');
+  const a = await createItem(
+    'annual',
+    { year: 2035, progressMode: 'auto', weight: 100 },
+    account.cookie,
+  );
+  const m = await createItem(
+    'monthly',
+    { month: '2035-11', parentId: a.id, progress: 0, weight: 100 },
+    account.cookie,
+  );
+  const w = await createItem(
+    'weekly',
+    { startDate: '2035-11-26', endDate: '2035-12-02', parentId: m.id, progress: 0 },
+    account.cookie,
+  );
+  let d = await createItem(
+    'daily',
+    { date: '2035-11-26', parentId: w.id, done: false },
+    account.cookie,
+  );
+  const verify = async (expected) => {
+    for (const parent of [w, m, a]) {
+      const r = await request(`/work-items/${parent.type}/${parent.id}`, {
+        cookie: account.cookie,
+      });
+      assert.equal(r.body.item.calculatedProgress, expected);
+      assert.equal(r.body.item.version, parent.version);
+    }
+    const r = await request(
+      '/overview?year=2035&month=2035-11&start=2035-11-26&end=2035-12-02&date=2035-11-26',
+      { cookie: account.cookie },
+    );
+    assert.equal(r.response.status, 200);
+    for (const type of ['annual', 'monthly', 'weekly']) assert.equal(r.body[type].value, expected);
+  };
+  await verify(0);
+  d = await updateItem(d, { done: true }, account.cookie);
+  await verify(100);
+  let second = await createItem(
+    'daily',
+    { date: '2035-11-27', parentId: w.id, done: false },
+    account.cookie,
+  );
+  await verify(50);
+  second = await updateItem(second, { terminated: true }, account.cookie);
+  await verify(100);
+  await updateItem(second, { terminated: false, parentId: null }, account.cookie);
+  await verify(100);
+  await updateItem(d, { done: false }, account.cookie);
+  await verify(0);
+});

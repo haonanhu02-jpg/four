@@ -33,6 +33,20 @@ const weighted = (rows: WorkItem[], all: WorkItem[] = rows): Metric => {
   };
 };
 export function localInsights(records: WorkItem[], q: WorkbenchQuery, today: string) {
+  records = records.map((v) => ({
+    ...v,
+    progress: effectiveProgress(v, records),
+    ...(v.type === 'weekly'
+      ? {
+          status:
+            effectiveProgress(v, records) === 100
+              ? ('done' as const)
+              : effectiveProgress(v, records) === 0
+                ? ('todo' as const)
+                : ('doing' as const),
+        }
+      : {}),
+  }));
   const all = records.filter((v) => !v.deletedAt && !v.archivedAt && !v.terminated),
     map = new Map(all.map((v) => [v.id, v]));
   const ancestors = (v: WorkItem) => {
@@ -75,7 +89,7 @@ export function localInsights(records: WorkItem[], q: WorkbenchQuery, today: str
   const overview: Overview = {
     asOfDate: today,
     annual: weighted(annual, all),
-    monthly: weighted(monthly),
+    monthly: weighted(monthly, all),
     weekly: {
       ...count(weekly),
       value: weekly.length

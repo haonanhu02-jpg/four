@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import {
   effectiveProgress,
+  hasProgressChildren,
   itemComplete,
   itemState,
   weightedProgress,
@@ -106,7 +107,10 @@ const monthSummaries = computed(() => {
     const active = months.filter((v) => !v.terminated);
     const complete = active.filter((v) => itemComplete(v, all.value)).length;
     result.set(goal.id, {
-      progress: weightedProgress(active.filter((v) => v.month === board.selection.month)),
+      progress: weightedProgress(
+        active.filter((v) => v.month === board.selection.month),
+        (v) => effectiveProgress(v, all.value),
+      ),
       complete,
       incomplete: active.length - complete,
       terminated: months.length - active.length,
@@ -116,6 +120,12 @@ const monthSummaries = computed(() => {
 });
 function stateOptions(item: WorkItem) {
   const state = itemState(item, all.value);
+  const childAutomatic = hasProgressChildren(item, all.value);
+  if (childAutomatic)
+    return [
+      { value: 'active', label: item.terminated ? '恢复执行' : states[state] },
+      { value: 'terminated', label: '已终止' },
+    ];
   const automatic = props.type === 'annual' && item.progressMode === 'auto';
   return [
     { value: 'active', label: item.terminated ? '恢复执行' : states[state] },
@@ -294,7 +304,10 @@ function changeState(item: WorkItem, value: string) {
           <td :data-label="type === 'annual' ? '年度进度' : '进度'">
             <div class="wb-table-progress">
               <label
-                v-if="type !== 'annual' || item.progressMode !== 'auto'"
+                v-if="
+                  (type !== 'annual' || item.progressMode !== 'auto') &&
+                  !hasProgressChildren(item, all)
+                "
                 class="wb-table-number"
                 ><input
                   type="number"
@@ -309,6 +322,7 @@ function changeState(item: WorkItem, value: string) {
               <strong v-else :data-auto-progress="item.id"
                 >{{ effectiveProgress(item, all) }}%</strong
               >
+              <small v-if="hasProgressChildren(item, all)">按关联周任务自动汇总</small>
               <div class="wb-progress-track">
                 <span :style="{ width: `${effectiveProgress(item, all)}%` }" />
               </div>

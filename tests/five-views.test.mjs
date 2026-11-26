@@ -194,3 +194,41 @@ test('weekly numeric progress drives completion and aggregates while legacy stat
     normalized.items,
   );
 });
+
+test('daily completion cascades through weekly, monthly and weighted annual progress', () => {
+  const week = { id: 'w', type: 'weekly', parentId: 'm', progress: 0, status: 'todo' };
+  const day = { id: 'd', type: 'daily', parentId: 'w', done: false, date: '2026-11-26' };
+  const month = { ...monthly, progress: 0, weight: 100 };
+  let rows = [annual, month, week, day];
+  for (const v of [annual, month, week]) assert.equal(effectiveProgress(v, rows), 0);
+  day.done = true;
+  for (const v of [annual, month, week]) assert.equal(effectiveProgress(v, rows), 100);
+  rows.push({ ...day, id: 'd2', done: false });
+  for (const v of [annual, month, week]) assert.equal(effectiveProgress(v, rows), 50);
+  const q = {
+    year: 2026,
+    month: '2026-11',
+    start: '2026-11-23',
+    end: '2026-11-29',
+    date: '2026-11-26',
+  };
+  week.startDate = q.start;
+  week.endDate = q.end;
+  const overview = localInsights(rows, q, q.date).overview;
+  for (const type of ['annual', 'monthly', 'weekly']) assert.equal(overview[type].value, 50);
+  assert.equal(overview.daily.completed, 1);
+  rows[4].terminated = true;
+  assert.equal(effectiveProgress(annual, rows), 100);
+  rows[4].terminated = false;
+  rows[4].deletedAt = '2026-11-26';
+  assert.equal(effectiveProgress(annual, rows), 100);
+  rows[4].deletedAt = null;
+  rows[4].archivedAt = '2026-11-26';
+  assert.equal(effectiveProgress(annual, rows), 100);
+  day.done = false;
+  assert.equal(effectiveProgress(annual, rows), 0);
+  day.parentId = null;
+  assert.equal(effectiveProgress(week, rows), 0);
+  assert.equal(effectiveProgress({ ...week, progress: 37 }, rows), 37);
+  assert.equal(effectiveProgress({ ...annual, progressMode: 'manual' }, rows), annual.progress);
+});

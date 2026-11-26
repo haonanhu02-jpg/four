@@ -21,11 +21,11 @@ import { WorkItemsService, item } from './work-items.service';
 const executionTree = `WITH roots AS (
   SELECT * FROM annual_goals WHERE user_id=$1 AND year=$2 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), months AS (
-  SELECT m.*,r.id AS root_id,r.title AS root_title FROM monthly_goals m
+  SELECT m.*,r.id AS root_id,r.title AS root_title FROM monthly_progress_read m
   JOIN roots r ON r.id=m.annual_goal_id AND r.user_id=m.user_id
   WHERE m.deleted_at IS NULL AND m.archived_at IS NULL AND NOT m.terminated
 ), weeks AS (
-  SELECT w.*,m.root_id,m.root_title FROM weekly_tasks w
+  SELECT w.*,m.root_id,m.root_title FROM weekly_progress_read w
   JOIN months m ON m.id=w.monthly_goal_id AND m.user_id=w.user_id
   WHERE w.deleted_at IS NULL AND w.archived_at IS NULL AND NOT w.terminated
 ), days AS (
@@ -47,9 +47,9 @@ const alignmentTree = `WITH a AS (
   SELECT *,annual_progress_value(user_id,id,progress_mode,progress) AS effective_progress
   FROM annual_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), m AS (
-  SELECT * FROM monthly_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
+  SELECT * FROM monthly_progress_read WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), w AS (
-  SELECT * FROM weekly_tasks WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
+  SELECT * FROM weekly_progress_read WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), d AS (
   SELECT * FROM daily_tasks WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
 ), scoped AS (
@@ -107,7 +107,7 @@ export class InsightsService {
         const source =
           table === 'annual_goals'
             ? '(SELECT *,annual_progress_value(user_id,id,progress_mode,progress) AS effective_progress FROM annual_goals) AS goals'
-            : table;
+            : 'monthly_progress_read';
         const progress = table === 'annual_goals' ? 'effective_progress' : 'progress';
         const result = await client.query(
           `SELECT count(*)::int AS total,
@@ -130,7 +130,7 @@ export class InsightsService {
         `SELECT count(*)::int AS total,
         count(*) FILTER (WHERE status='done')::int AS completed,
         round(avg(COALESCE(progress,CASE status WHEN 'todo' THEN 0 WHEN 'doing' THEN 50 WHEN 'block' THEN 15 ELSE 100 END))) AS value
-        FROM weekly_tasks WHERE user_id=$1 AND current_start<=$3::date AND current_end>=$2::date
+        FROM weekly_progress_read WHERE user_id=$1 AND current_start<=$3::date AND current_end>=$2::date
           AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated`,
         [userId, q.start, q.end],
       );
@@ -185,9 +185,9 @@ export class InsightsService {
       }));
       const monthlyCounts = await client.query(
         `WITH m AS (
-        SELECT id,user_id FROM monthly_goals WHERE user_id=$1 AND current_month=$2::date AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
+        SELECT id,user_id FROM monthly_progress_read WHERE user_id=$1 AND current_month=$2::date AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated
       ), w AS (
-        SELECT w.* FROM weekly_tasks w JOIN m ON m.id=w.monthly_goal_id AND m.user_id=w.user_id
+        SELECT w.* FROM weekly_progress_read w JOIN m ON m.id=w.monthly_goal_id AND m.user_id=w.user_id
           WHERE w.deleted_at IS NULL AND w.archived_at IS NULL AND NOT w.terminated
       ), children AS (
         SELECT id,monthly_goal_id AS root,'weekly' AS type,status='done' AS completed FROM w

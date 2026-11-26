@@ -21,14 +21,18 @@ const months = computed(() =>
 const annualProgress = computed(() =>
   weightedProgress(annual.value, (v) => effectiveProgress(v, all.value)),
 );
-const monthlyProgress = computed(() => weightedProgress(months.value));
+const monthlyProgress = computed(() =>
+  weightedProgress(months.value, (v) => effectiveProgress(v, all.value)),
+);
 const sortedAnnual = computed(() =>
   [...annual.value].sort(
     (a, b) => effectiveProgress(b, all.value) - effectiveProgress(a, all.value),
   ),
 );
 const sortedMonthly = computed(() =>
-  [...months.value].sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0)),
+  [...months.value].sort(
+    (a, b) => effectiveProgress(b, all.value) - effectiveProgress(a, all.value),
+  ),
 );
 const states = computed(() => ({
   done: annual.value.filter((v) => itemComplete(v, all.value)).length,
@@ -48,7 +52,12 @@ const trend = computed(() =>
   Array.from({ length: 12 }, (_, index) => {
     const month = `${board.selection.year}-${String(index + 1).padStart(2, '0')}`,
       items = all.value.filter((v) => v.type === 'monthly' && v.month === month);
-    return { month, label: index + 1, total: items.length, value: weightedProgress(items) };
+    return {
+      month,
+      label: index + 1,
+      total: items.length,
+      value: weightedProgress(items, (v) => effectiveProgress(v, all.value)),
+    };
   }),
 );
 const text = (value: number | null) => (value === null ? '—' : `${value}%`);
@@ -157,9 +166,9 @@ function selectMonth(month: string) {
         <span>{{ goal.title || '未命名月度目标' }}</span
         ><span class="wb-chart-track"
           ><i
-            :class="{ done: goal.progress === 100 }"
-            :style="{ width: `${goal.progress}%` }" /></span
-        ><strong>{{ goal.progress }}%</strong>
+            :class="{ done: effectiveProgress(goal, all) === 100 }"
+            :style="{ width: `${effectiveProgress(goal, all)}%` }" /></span
+        ><strong>{{ effectiveProgress(goal, all) }}%</strong>
       </button>
       <p v-if="!months.length" class="wb-insight-empty">本月暂无月度目标。</p>
     </section>

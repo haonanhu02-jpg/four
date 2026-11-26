@@ -13,8 +13,8 @@ import { RolloverClock } from './rollover-clock';
 import { DEFINITIONS, item } from './work-item-model';
 import { ApiException } from './http';
 
-const expired = `SELECT 'monthly' AS type,id FROM monthly_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated AND progress<100 AND current_month<date_trunc('month',$2::date)::date
- UNION ALL SELECT 'weekly',id FROM weekly_tasks WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated AND status<>'done' AND current_end<$2::date
+const expired = `SELECT 'monthly' AS type,id FROM monthly_goals WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated AND monthly_progress_value(user_id,id,progress)<100 AND current_month<date_trunc('month',$2::date)::date
+ UNION ALL SELECT 'weekly',id FROM weekly_tasks WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated AND weekly_progress_value(user_id,id,progress)<100 AND current_end<$2::date
  UNION ALL SELECT 'daily',id FROM daily_tasks WHERE user_id=$1 AND deleted_at IS NULL AND archived_at IS NULL AND NOT terminated AND NOT done AND scheduled_date<$2::date`;
 @Injectable()
 export class RolloverService implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -46,8 +46,8 @@ export class RolloverService implements OnApplicationBootstrap, OnApplicationShu
       const rows = await this.db.pool.query(
         `SELECT u.id FROM users u LEFT JOIN rollover_state s ON s.user_id=u.id
         WHERE u.id>$1 AND (s.checked_date IS NULL OR s.checked_date<>(CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date
-          OR EXISTS(SELECT 1 FROM monthly_goals m WHERE m.user_id=u.id AND m.deleted_at IS NULL AND m.archived_at IS NULL AND NOT m.terminated AND m.progress<100 AND m.current_month<date_trunc('month',CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date)
-          OR EXISTS(SELECT 1 FROM weekly_tasks w WHERE w.user_id=u.id AND w.deleted_at IS NULL AND w.archived_at IS NULL AND NOT w.terminated AND w.status<>'done' AND w.current_end<(CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date)
+          OR EXISTS(SELECT 1 FROM monthly_goals m WHERE m.user_id=u.id AND m.deleted_at IS NULL AND m.archived_at IS NULL AND NOT m.terminated AND monthly_progress_value(m.user_id,m.id,m.progress)<100 AND m.current_month<date_trunc('month',CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date)
+          OR EXISTS(SELECT 1 FROM weekly_tasks w WHERE w.user_id=u.id AND w.deleted_at IS NULL AND w.archived_at IS NULL AND NOT w.terminated AND weekly_progress_value(w.user_id,w.id,w.progress)<100 AND w.current_end<(CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date)
           OR EXISTS(SELECT 1 FROM daily_tasks d WHERE d.user_id=u.id AND d.deleted_at IS NULL AND d.archived_at IS NULL AND NOT d.terminated AND NOT d.done AND d.scheduled_date<(CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date))
         ORDER BY u.id LIMIT 50`,
         [this.cursor],
@@ -168,7 +168,7 @@ export class RolloverService implements OnApplicationBootstrap, OnApplicationShu
       // Detect older annual sources even if their current month was already moved.
       const carryCandidates = await client.query(
         `SELECT m.* FROM monthly_goals m LEFT JOIN annual_goals a ON a.id=m.annual_goal_id AND a.user_id=m.user_id
-        WHERE m.user_id=$1 AND m.deleted_at IS NULL AND m.archived_at IS NULL AND NOT m.terminated AND m.progress<100
+        WHERE m.user_id=$1 AND m.deleted_at IS NULL AND m.archived_at IS NULL AND NOT m.terminated AND monthly_progress_value(m.user_id,m.id,m.progress)<100
           AND extract(year FROM m.current_month)=$2 AND ((a.year IS NOT NULL AND a.year<$2) OR extract(year FROM m.original_month)<$2)
           AND NOT EXISTS(SELECT 1 FROM year_carryovers c WHERE c.user_id=m.user_id AND c.monthly_goal_id=m.id AND c.target_year=$2) ORDER BY m.id LIMIT 100`,
         [userId, year],
