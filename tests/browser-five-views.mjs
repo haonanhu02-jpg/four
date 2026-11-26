@@ -232,6 +232,49 @@ try {
     await evaluate('[...document.querySelectorAll(".wb-view-tabs button")].map(e=>e.dataset.view)'),
     ['annual', 'monthly', 'weekly', 'charts', 'tree'],
   );
+  // Follow the same UI path as an annual goal that has not started yet.
+  await view('annual');
+  await click('[data-add-type="annual"]');
+  await wait('!!document.querySelector(".wb-goals-table tbody tr")', 'new annual goal');
+  const inactiveAnnual = await evaluate(
+    'document.querySelector(".wb-goals-table tbody tr").dataset.itemId',
+  );
+  await input(`[data-title-id="${inactiveAnnual}"]`, '未开始年度目标拆月验证');
+  await click(`[data-item-id="${inactiveAnnual}"] [aria-label="年度进度模式"]`);
+  await clickText('月目标自动汇总');
+  await click(`[data-item-id="${inactiveAnnual}"] .wb-annual-row-actions .wb-link`);
+  await wait(
+    'board.view==="monthly"&&!!document.querySelector(".wb-goals-table tbody tr")',
+    'annual goal split into monthly goal',
+  );
+  const splitMonth = await evaluate(
+    'document.querySelector(".wb-goals-table tbody tr").dataset.itemId',
+  );
+  await input(`[data-title-id="${splitMonth}"]`, '从未开始年度拆出的月目标');
+  assert.equal(await evaluate(`board.records['${splitMonth}'].parentId`), inactiveAnnual);
+  assert.equal(await evaluate(`board.records['${inactiveAnnual}'].progress`), 0);
+  assert.equal(await evaluate(`board.records['${splitMonth}'].progress`), 0);
+  await view('weekly');
+  await wait(
+    `!!document.querySelector('[data-unplanned-month="${splitMonth}"]')`,
+    'unstarted monthly goal appears in weekly reminder',
+  );
+  assert.ok(
+    await evaluate(
+      `document.querySelector('[data-unplanned-month="${splitMonth}"]').getClientRects().length>0`,
+    ),
+  );
+  assert.equal(
+    await evaluate(
+      'Object.values(board.records).filter(v=>v.type==="weekly"&&!v.deletedAt).length',
+    ),
+    0,
+    'reminder does not generate weekly tasks',
+  );
+  await shot('unstarted-annual-split-month-in-week', '.wb-unplanned-months');
+  await evaluate(
+    `board.remove(board.records['${splitMonth}']).then(()=>board.remove(board.records['${inactiveAnnual}']))`,
+  );
   await clickText('数据管理');
   await clickText('载入示例并预览');
   await wait('!!document.querySelector(".wb-data-preview")', 'preview');
@@ -640,7 +683,7 @@ try {
   await clickText('全部展开');
   assert.equal(await evaluate('document.querySelectorAll(".wb-daily-compact").length'), 7);
   const day = await evaluate(
-    'JSON.parse(JSON.stringify(Object.values(board.records).find(v=>v.type==="daily")))',
+    'JSON.parse(JSON.stringify(board.records[document.querySelector(".wb-daily-compact").dataset.itemId]))',
   );
   await input(`[data-item-id="${day.id}"] [aria-label="每日工作时间"]`, '09:30–11:00');
   await input(
