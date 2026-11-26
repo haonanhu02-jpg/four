@@ -93,6 +93,11 @@ async function checkBoundary() {
 }
 const focused = computed(() => store.records[focusedId.value]);
 let detailsSequence = 0;
+let openingDetails = false;
+function onDetailClosed() {
+  // A previous close event may arrive while another source is opening or open.
+  if (!openingDetails && !detailDialog.value?.open) focusedId.value = '';
+}
 let mounted = true;
 watch(
   () => JSON.stringify(store.selection),
@@ -107,11 +112,16 @@ watch(
 );
 async function openItem(value: WorkItem) {
   const sequence = ++detailsSequence;
-  const result = await store.detail(value.type, value.id);
-  if (!result || sequence !== detailsSequence) return;
-  focusedId.value = result.id;
-  await nextTick();
-  detailDialog.value?.showModal();
+  openingDetails = true;
+  try {
+    const result = await store.detail(value.type, value.id);
+    if (!result || sequence !== detailsSequence) return;
+    focusedId.value = result.id;
+    await nextTick();
+    detailDialog.value?.showModal();
+  } finally {
+    if (sequence === detailsSequence) openingDetails = false;
+  }
 }
 const initialDate = todayIn(account.session?.user.timezone);
 const year = ref(Number(initialDate.slice(0, 4)));
@@ -659,7 +669,7 @@ onUnmounted(() => {
       ref="detailDialog"
       class="wb-dialog wb-detail-dialog"
       aria-labelledby="detail-heading"
-      @close="focusedId = ''"
+      @close="onDetailClosed"
     >
       <header>
         <div>

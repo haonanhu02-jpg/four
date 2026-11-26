@@ -811,6 +811,13 @@ try {
       `!!document.querySelector('.wb-detail-dialog[open] [data-item-id="${parent.id}"]')`,
       'source opens original editable record',
     );
+    await evaluate('document.querySelector(".wb-detail-dialog").dispatchEvent(new Event("close"))');
+    assert.ok(
+      await evaluate(
+        `!!document.querySelector('.wb-detail-dialog[open] [data-item-id="${parent.id}"]')`,
+      ),
+      'a delayed close event from an earlier source must not clear the reopened detail',
+    );
     await click('[aria-label="关闭事项详情"]');
   }
   await input('[aria-label="搜索日待办"]', sources[2].title);

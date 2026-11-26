@@ -388,7 +388,8 @@ test('repeated wrong passwords are throttled by employee number and IP', async (
 test('database migrations can be run repeatedly without duplicating schema', async () => {
   await migrate(process.env.DATABASE_URL);
   const applied = await pool.query('SELECT count(*)::integer AS count FROM schema_migrations');
-  assert.equal(applied.rows[0].count, 8);
+  const files = await readdir(fileURLToPath(new URL('../database/migrations/', import.meta.url)));
+  assert.equal(applied.rows[0].count, files.filter((name) => name.endsWith('.sql')).length);
 });
 
 const chain = {};
