@@ -11,11 +11,17 @@ import { useWorkbenchStore } from '../stores/workbench';
 import ParentPicker from './ParentPicker.vue';
 import ChoicePicker from './ChoicePicker.vue';
 import { useInsightsStore } from '../stores/insights';
-const props = defineProps<{ item: WorkItem; index: number; compact?: boolean }>();
+const props = defineProps<{
+  item: WorkItem;
+  index: number;
+  compact?: boolean;
+  sourceLinks?: boolean;
+}>();
 const emit = defineEmits<{
   remove: [item: WorkItem];
   add: [type: WorkItemType, parentId?: string];
   history: [item: WorkItem];
+  open: [item: WorkItem];
 }>();
 const store = useWorkbenchStore();
 const insights = useInsightsStore();
@@ -339,7 +345,27 @@ function addSibling() {
         · 顺延 {{ item.rolloverCount || 0 }} 次</span
       ><button type="button" class="wb-link" @click="emit('history', item)">排期记录</button>
     </div>
-    <div v-if="item.type !== 'annual'" class="wb-lineage">
+    <div v-if="sourceLinks" class="wb-daily-sources" aria-label="日待办来源">
+      <span v-for="type in ['weekly', 'monthly', 'annual'] as WorkItemType[]" :key="type">
+        {{ { weekly: '周任务', monthly: '月目标', annual: '年度目标', daily: '日待办' }[type] }}：
+        <button
+          v-if="chain.find((p) => p.type === type)"
+          type="button"
+          class="wb-link"
+          :data-source-type="type"
+          @click="
+            emit(
+              'open',
+              chain.find((p) => p.type === type)!,
+            )
+          "
+        >
+          {{ chain.find((p) => p.type === type)!.title || '未命名事项' }}
+        </button>
+        <span v-else class="wb-unlinked">未关联</span>
+      </span>
+    </div>
+    <div v-else-if="item.type !== 'annual'" class="wb-lineage">
       <span v-if="!chain.length" class="wb-unlinked">尚未关联上级事项</span>
       <span v-for="parent in chain" :key="parent.id"
         >{{ { annual: '年', monthly: '月', weekly: '周', daily: '日' }[parent.type] }} →

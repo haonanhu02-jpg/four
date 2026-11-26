@@ -21,6 +21,7 @@ import DataPanel from './DataPanel.vue';
 import AdminPanel from './AdminPanel.vue';
 import GoalTable from './GoalTable.vue';
 import WeeklyExecution from './WeeklyExecution.vue';
+import DailyExecution from './DailyExecution.vue';
 import ChartsPanel from './ChartsPanel.vue';
 import PlanTree from './PlanTree.vue';
 import ProjectChanges from './ProjectChanges.vue';
@@ -228,7 +229,7 @@ async function add(type: WorkItemType, parentId?: string, date?: string) {
     store.error = '请先处理未保存的内容';
     return;
   }
-  store.view = type === 'annual' ? 'annual' : type === 'monthly' ? 'monthly' : 'weekly';
+  store.view = type === 'daily' && store.view === 'weekly' ? 'weekly' : type;
   const created = await store.add(type, parentId, date ? { date } : {});
   if (created) {
     detailDialog.value?.close();
@@ -443,6 +444,14 @@ onUnmounted(() => {
           周任务 <span>{{ store.groups.weekly.total }}</span></button
         ><button
           type="button"
+          data-view="daily"
+          :class="{ active: store.view === 'daily' }"
+          :aria-pressed="store.view === 'daily'"
+          @click="store.view = 'daily'"
+        >
+          日待办 <span>{{ store.groups.daily.total }}</span></button
+        ><button
+          type="button"
           data-view="charts"
           :class="{ active: store.view === 'charts' }"
           :aria-pressed="store.view === 'charts'"
@@ -476,8 +485,8 @@ onUnmounted(() => {
             :disabled="store.loading"
             @change="changeYear"
         /></label>
-        <template v-if="['monthly', 'weekly', 'charts'].includes(store.view)">
-          <label
+        <template v-if="['monthly', 'weekly', 'daily', 'charts'].includes(store.view)">
+          <label v-if="store.view !== 'daily'"
             >月份<input
               v-model="month"
               type="month"
@@ -485,7 +494,11 @@ onUnmounted(() => {
               :disabled="store.loading"
               @change="changeMonth()"
           /></label>
-          <form v-if="store.view !== 'charts'" class="wb-range-form" @submit.prevent="applyRange">
+          <form
+            v-if="['monthly', 'weekly'].includes(store.view)"
+            class="wb-range-form"
+            @submit.prevent="applyRange"
+          >
             <span>周 / 自定义区间</span>
             <div>
               <button
@@ -526,7 +539,7 @@ onUnmounted(() => {
     <p v-if="store.loading" class="wb-loading" role="status">正在读取工作台…</p>
 
     <OverviewPanel
-      v-if="!store.loading && ['annual', 'monthly', 'weekly'].includes(store.view)"
+      v-if="!store.loading && ['annual', 'monthly', 'weekly', 'daily'].includes(store.view)"
       @open="openItem"
     />
 
@@ -595,6 +608,13 @@ onUnmounted(() => {
     </template>
     <WeeklyExecution
       v-if="store.view === 'weekly' && !store.loading"
+      @open="openItem"
+      @remove="remove"
+      @history="openHistory"
+      @add="add"
+    />
+    <DailyExecution
+      v-if="store.view === 'daily' && !store.loading"
       @open="openItem"
       @remove="remove"
       @history="openHistory"

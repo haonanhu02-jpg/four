@@ -306,13 +306,13 @@ watch(
     <article v-if="orphans.length" class="wb-unlinked-days">
       <header class="wb-section-header">
         <div>
-          <h3>未挂周任务的待办 {{ orphans.length }} 条</h3>
+          <h3>未挂周任务的日待办 {{ orphans.length }} 条</h3>
           <p>这些每日待办尚未关联周任务，展开可查看内容、填写工作情况或补充关联。</p>
         </div>
         <button
           type="button"
           class="wb-expand-days wb-unlinked-toggle"
-          :aria-label="`${isOpen('unlinked') ? '收起' : '展开'}未挂周任务的待办`"
+          :aria-label="`${isOpen('unlinked') ? '收起' : '展开'}未挂周任务的日待办`"
           :aria-expanded="isOpen('unlinked')"
           aria-controls="wb-unlinked-day-list"
           @click="opened.unlinked = !isOpen('unlinked')"

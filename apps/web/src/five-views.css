@@ -413,6 +413,33 @@
 .wb-daily-compact .wb-lineage {
   display: none;
 }
+.wb-daily-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.wb-daily-execution > .wb-item {
+  margin-bottom: 12px;
+}
+.wb-daily-sources > span {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+.wb-daily-sources .wb-link {
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.wb-item-heading > .wb-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .wb-daily-compact .wb-schedule-meta {
   font-size: 10px;
   margin-top: 7px;

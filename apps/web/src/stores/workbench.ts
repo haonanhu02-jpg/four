@@ -46,7 +46,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       end: addDays(monday(day), 6),
       date: day,
     });
-  const view = ref<'annual' | 'monthly' | 'weekly' | 'charts' | 'tree'>('monthly'),
+  const view = ref<'annual' | 'monthly' | 'weekly' | 'daily' | 'charts' | 'tree'>('monthly'),
     userId = ref(''),
     loading = ref(false),
     error = ref(''),
@@ -483,7 +483,9 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     }
     try {
       const savedView = await local.metaGet<string>(`view:${id}`);
-      view.value = ['annual', 'monthly', 'weekly', 'charts', 'tree'].includes(savedView ?? '')
+      view.value = ['annual', 'monthly', 'weekly', 'daily', 'charts', 'tree'].includes(
+        savedView ?? '',
+      )
         ? (savedView as typeof view.value)
         : 'monthly';
       lastCloud.value = (await local.metaGet<string>(`last-cloud:${id}`)) ?? '';

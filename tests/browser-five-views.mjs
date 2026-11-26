@@ -248,7 +248,7 @@ try {
   );
   assert.deepEqual(
     await evaluate('[...document.querySelectorAll(".wb-view-tabs button")].map(e=>e.dataset.view)'),
-    ['annual', 'monthly', 'weekly', 'charts', 'tree'],
+    ['annual', 'monthly', 'weekly', 'daily', 'charts', 'tree'],
   );
   // Follow the same UI path as an annual goal that has not started yet.
   await view('annual');
@@ -649,7 +649,7 @@ try {
     return ids;
   })()`);
   await wait(
-    'document.querySelector(".wb-unlinked-days h3")?.textContent.includes("未挂周任务的待办 3 条")',
+    'document.querySelector(".wb-unlinked-days h3")?.textContent.includes("未挂周任务的日待办 3 条")',
     'three orphan daily tasks counted',
   );
   assert.ok(
@@ -669,7 +669,7 @@ try {
   );
   await shot('weekly-unlinked-three-collapsed', '.wb-unlinked-days');
   await shot('weekly-unplanned-months', '.wb-unplanned-months');
-  await click('[aria-label="展开未挂周任务的待办"]');
+  await click('[aria-label="展开未挂周任务的日待办"]');
   await wait(
     'document.querySelectorAll(".wb-unlinked-days .wb-daily-compact").length===3',
     'all three orphan contents expand',
@@ -767,6 +767,82 @@ try {
   );
   await click('[aria-label="关闭事项详情"]');
   await input('[aria-label="搜索层级清单"]', '');
+  const previousDate = await evaluate('board.selection.date');
+  await view('daily');
+  await evaluate(
+    `(()=>{const e=document.querySelector('[aria-label="查看日期"]');e.value=${JSON.stringify(day.date)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`,
+  );
+  await wait(
+    `!!document.querySelector('.wb-daily-execution [data-item-id="${day.id}"]')`,
+    'daily view follows selected date',
+  );
+  const sources = await evaluate(
+    `board.lineage(board.records['${day.id}']).map(v=>({id:v.id,type:v.type,title:v.title}))`,
+  );
+  assert.equal(sources.length, 3, 'daily source includes weekly, monthly and annual levels');
+  for (const parent of sources) {
+    const source = `.wb-daily-execution [data-item-id="${day.id}"] [data-source-type="${parent.type}"]`;
+    assert.equal(
+      await evaluate(`document.querySelector(${JSON.stringify(source)}).textContent.trim()`),
+      parent.title,
+    );
+    await click(source);
+    await wait(
+      `!!document.querySelector('.wb-detail-dialog[open] [data-item-id="${parent.id}"]')`,
+      'source opens original editable record',
+    );
+    await click('[aria-label="关闭事项详情"]');
+  }
+  await input('[aria-label="搜索日待办"]', sources[2].title);
+  assert.ok(
+    await evaluate(`!!document.querySelector('.wb-daily-execution [data-item-id="${day.id}"]')`),
+  );
+  await input('[aria-label="搜索日待办"]', 'no matching daily item');
+  await wait(
+    '!document.querySelector(".wb-daily-execution .wb-item")',
+    'daily search filters records',
+  );
+  await click('.wb-daily-execution [data-add-type="daily"]');
+  await wait(
+    'board.view==="daily"&&!!document.activeElement.dataset.titleId&&document.querySelector(".wb-daily-execution").contains(document.activeElement)',
+    'daily creation stays in daily view',
+  );
+  const newDaily = await evaluate('document.activeElement.dataset.titleId');
+  assert.ok(newDaily);
+  await input(`[data-title-id="${newDaily}"]`, '日待办独立视图创建');
+  await evaluate(`board.edit(board.records['${newDaily}'],{parentId:null})`);
+  await wait(
+    `document.querySelectorAll('.wb-daily-execution [data-item-id="${newDaily}"] .wb-daily-sources .wb-unlinked').length===3`,
+    'missing sources are explicitly labelled',
+  );
+  await wait('!board.hasUnpersisted', 'daily view changes persisted');
+  await reloadPage();
+  await evaluate(
+    'window.board=document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench");true',
+  );
+  assert.equal(await evaluate('board.view'), 'daily');
+  assert.equal(await evaluate(`board.records['${newDaily}'].title`), '日待办独立视图创建');
+  // Selection resets to today on startup; explicitly revisit the fixture date.
+  await evaluate(
+    `(()=>{const e=document.querySelector('[aria-label="查看日期"]');e.value=${JSON.stringify(day.date)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`,
+  );
+  await wait(
+    `!!document.querySelector('.wb-daily-execution [data-item-id="${newDaily}"]')`,
+    'saved daily item visible on its date',
+  );
+  await click(`.wb-daily-execution [data-item-id="${newDaily}"] input[type="checkbox"]`);
+  await wait(`board.records['${newDaily}'].done===true`, 'daily completion updates shared data');
+  await view('weekly');
+  assert.ok(
+    await evaluate(
+      'document.querySelector(".wb-unlinked-days h3").textContent.includes("未挂周任务的日待办")',
+    ),
+  );
+  await evaluate(`board.remove(board.records['${newDaily}'])`);
+  await view('daily');
+  await evaluate(
+    `(()=>{const e=document.querySelector('[aria-label="查看日期"]');e.value=${JSON.stringify(previousDate)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`,
+  );
   await view('charts');
   const finalRecords = await evaluate('JSON.parse(JSON.stringify(Object.values(board.records)))');
   assert.equal(
@@ -801,7 +877,7 @@ try {
     });
     for (const color of ['light', 'dark']) {
       await theme(color);
-      for (const name of ['annual', 'monthly', 'weekly', 'charts', 'tree']) {
+      for (const name of ['annual', 'monthly', 'weekly', 'daily', 'charts', 'tree']) {
         await view(name);
         const size = await evaluate(
           '({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,inner:innerWidth})',
@@ -846,6 +922,8 @@ try {
     compactGoalRows: true,
     privateHttp,
     fiveViews: true,
+    sixViews: true,
+    dailyViewWithSources: true,
     autoModePreservesManual: true,
     nestedDays: true,
     timeAndNotesPersist: true,
