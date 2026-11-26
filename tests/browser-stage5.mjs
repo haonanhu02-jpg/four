@@ -250,7 +250,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
     await waitFor('document.querySelectorAll(".wb-item-daily").length===7', 'guest sample');
     await click('[aria-label="关闭数据管理"]');
     await waitFor(
-      'document.querySelector("[data-metric=weekly] strong")?.textContent.includes("50")',
+      'document.querySelector("[data-metric=weekly] strong")?.textContent.trim()==="0%"',
       'guest consistent weekly metric',
     );
     await screenshot('guest-desktop.png');
