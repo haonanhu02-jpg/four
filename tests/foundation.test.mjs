@@ -2406,3 +2406,73 @@ test('daily completion derives weekly/monthly/annual reads and overview without 
   await updateItem(d, { done: false }, account.cookie);
   await verify(0);
 });
+
+test('rollover fills missing current month and week once, preserves independent items, and remembers deletion', async () => {
+  const account = await featureAccount('rollover-generation');
+  const root = await createItem(
+    'annual',
+    { year: 2035, title: '自动补建根目标', progressMode: 'auto', weight: 100 },
+    account.cookie,
+  );
+  const done = await createItem(
+    'annual',
+    { year: 2035, title: '已完成不补建', progress: 100, progressMode: 'manual' },
+    account.cookie,
+  );
+  const stopped = await createItem(
+    'annual',
+    { year: 2035, title: '终止不补建', terminated: true },
+    account.cookie,
+  );
+  await atTime('2035-11-26T03:00:00Z', async () => {
+    const run = () =>
+      request('/rollover/reconcile', { method: 'POST', cookie: account.cookie, body: {} });
+    const results = await Promise.all([run(), run()]);
+    assert.equal(
+      results.reduce((n, r) => n + (r.body.generated?.monthly ?? 0), 0),
+      1,
+    );
+    assert.equal(
+      results.reduce((n, r) => n + (r.body.generated?.weekly ?? 0), 0),
+      1,
+    );
+    const doc = (await request('/data/export', { cookie: account.cookie })).body;
+    const m = doc.items.monthly.find((v) => v.parentId === root.id);
+    const w = doc.items.weekly.find((v) => v.parentId === m.id);
+    assert.equal(m.month, '2035-11');
+    assert.equal(m.weight, 0);
+    assert.equal(w.startDate, '2035-11-26');
+    assert.equal(w.endDate, '2035-12-02');
+    assert.equal(
+      doc.items.monthly.some((v) => [done.id, stopped.id].includes(v.parentId)),
+      false,
+    );
+    const removed = await request(`/work-items/weekly/${w.id}/delete`, {
+      method: 'POST',
+      cookie: account.cookie,
+      body: { operationId: randomUUID(), baseVersion: w.version },
+    });
+    assert.equal(removed.response.status, 201);
+    const repeated = await run();
+    assert.equal(repeated.body.generated.weekly, 0);
+    const independent = await createItem(
+      'monthly',
+      { month: '2035-11', title: '独立月目标', parentId: null },
+      account.cookie,
+    );
+    const filled = await run();
+    assert.equal(filled.body.generated.weekly, 1);
+    const next = (await request('/data/export', { cookie: account.cookie })).body;
+    assert.equal(next.items.monthly.find((v) => v.id === independent.id).parentId, null);
+    assert.equal(
+      next.items.weekly.filter((v) => v.parentId === independent.id && !v.deletedAt).length,
+      1,
+    );
+    await request(`/work-items/monthly/${m.id}/delete`, {
+      method: 'POST',
+      cookie: account.cookie,
+      body: { operationId: randomUUID(), baseVersion: m.version },
+    });
+    assert.equal((await run()).body.generated.monthly, 0);
+  });
+});

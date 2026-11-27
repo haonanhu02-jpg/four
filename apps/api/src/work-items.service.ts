@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { DatabaseService } from './database.service';
 import { ApiException } from './http';
-import { HistoryService } from './history.service';
+import { HistoryService, mondayOf } from './history.service';
 
 import { DEFINITIONS, item, progressSelect } from './work-item-model';
 export { item } from './work-item-model';
@@ -386,6 +386,14 @@ export class WorkItemsService {
       async (client) => {
         const before = await this.owned(client, userId, type, id);
         this.checkVersion(before, baseVersion);
+        if ((type === 'monthly' || type === 'weekly') && before.parentId) {
+          const parentType = type === 'monthly' ? 'annual' : 'monthly';
+          const period = type === 'monthly' ? `${before.month}-01` : mondayOf(before.startDate!);
+          await client.query(
+            `INSERT INTO rollover_generation(user_id,parent_type,parent_id,period,item_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
+            [userId, parentType, before.parentId, period, id],
+          );
+        }
         const childType = DEFINITIONS[type].child;
         await this.history.captureBefore(client, userId, before, 'before_delete');
         let detached = 0;

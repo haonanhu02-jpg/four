@@ -48,6 +48,8 @@ export class RolloverService implements OnApplicationBootstrap, OnApplicationShu
         WHERE u.id>$1 AND (s.checked_date IS NULL OR s.checked_date<>(CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date
           OR EXISTS(SELECT 1 FROM monthly_goals m WHERE m.user_id=u.id AND m.deleted_at IS NULL AND m.archived_at IS NULL AND NOT m.terminated AND monthly_progress_value(m.user_id,m.id,m.progress)<100 AND m.current_month<date_trunc('month',CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date)
           OR EXISTS(SELECT 1 FROM weekly_tasks w WHERE w.user_id=u.id AND w.deleted_at IS NULL AND w.archived_at IS NULL AND NOT w.terminated AND weekly_progress_value(w.user_id,w.id,coalesce(w.progress,CASE w.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 50 WHEN 'block' THEN 15 ELSE 100 END))<100 AND w.current_end<(CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date)
+          OR EXISTS(SELECT 1 FROM annual_goals a WHERE a.user_id=u.id AND a.updated_at>s.checked_at)
+          OR EXISTS(SELECT 1 FROM monthly_goals m WHERE m.user_id=u.id AND m.updated_at>s.checked_at)
           OR EXISTS(SELECT 1 FROM daily_tasks d WHERE d.user_id=u.id AND d.deleted_at IS NULL AND d.archived_at IS NULL AND NOT d.terminated AND NOT d.done AND d.scheduled_date<(CURRENT_TIMESTAMP AT TIME ZONE u.timezone)::date))
         ORDER BY u.id LIMIT 50`,
         [this.cursor],
@@ -165,6 +167,7 @@ export class RolloverService implements OnApplicationBootstrap, OnApplicationShu
         if (type === 'monthly' && Number(before.month!.slice(0, 4)) < year)
           await this.ensureCarryover(client, userId, before, after, year);
       }
+      const generated = await this.fillMissingPlans(client, userId, today);
       // Detect older annual sources even if their current month was already moved.
       const carryCandidates = await client.query(
         `SELECT m.* FROM monthly_goals m LEFT JOIN annual_goals a ON a.id=m.annual_goal_id AND a.user_id=m.user_id
@@ -205,8 +208,73 @@ export class RolloverService implements OnApplicationBootstrap, OnApplicationShu
         changed,
         remaining: remaining.rows[0].count,
         pendingCarryovers: pending.rows[0].count,
+        generated,
       };
     });
+  }
+  private async fillMissingPlans(client: PoolClient, userId: string, today: string) {
+    const month = `${today.slice(0, 7)}-01`,
+      start = mondayOf(today),
+      end = addDate(start, 6);
+    const generated = { monthly: 0, weekly: 0 };
+    // Account advisory lock held by reconcile serializes these checks with edits.
+    for (const type of ['annual', 'monthly'] as const) {
+      const period = type === 'annual' ? month : start;
+      const parents = await client.query(
+        type === 'annual'
+          ? `SELECT a.* FROM annual_goals a WHERE a.user_id=$1 AND a.year=extract(year FROM $2::date)
+            AND a.deleted_at IS NULL AND a.archived_at IS NULL AND NOT a.terminated
+            AND annual_progress_value(a.user_id,a.id,a.progress_mode,a.progress)<100
+            AND NOT EXISTS(SELECT 1 FROM monthly_goals m WHERE m.user_id=a.user_id AND m.annual_goal_id=a.id AND m.current_month=$2::date AND m.deleted_at IS NULL AND m.archived_at IS NULL)
+            AND NOT EXISTS(SELECT 1 FROM rollover_generation g WHERE g.user_id=a.user_id AND g.parent_type='annual' AND g.parent_id=a.id AND g.period=$2::date) ORDER BY a.id`
+          : `SELECT m.* FROM monthly_goals m WHERE m.user_id=$1 AND m.current_month=$2::date
+            AND m.deleted_at IS NULL AND m.archived_at IS NULL AND NOT m.terminated
+            AND monthly_progress_value(m.user_id,m.id,m.progress)<100
+            AND NOT EXISTS(SELECT 1 FROM weekly_tasks w WHERE w.user_id=m.user_id AND w.monthly_goal_id=m.id AND w.current_start<=$4::date AND w.current_end>=$3::date AND w.deleted_at IS NULL AND w.archived_at IS NULL)
+            AND NOT EXISTS(SELECT 1 FROM rollover_generation g WHERE g.user_id=m.user_id AND g.parent_type='monthly' AND g.parent_id=m.id AND g.period=$3::date) ORDER BY m.id`,
+        type === 'annual' ? [userId, month] : [userId, month, start, end],
+      );
+      for (const parent of parents.rows) {
+        const id = randomUUID();
+        const reservation = await client.query(
+          `INSERT INTO rollover_generation(user_id,parent_type,parent_id,period,item_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING item_id`,
+          [userId, type, parent.id, period, id],
+        );
+        if (!reservation.rowCount) continue;
+        const childType = type === 'annual' ? 'monthly' : 'weekly';
+        const inserted =
+          type === 'annual'
+            ? await client.query(
+                `INSERT INTO monthly_goals(id,user_id,annual_goal_id,title,note,original_month,current_month,progress,weight) VALUES($1,$2,$3,$4,$5,$6,$6,0,0) RETURNING *`,
+                [
+                  id,
+                  userId,
+                  parent.id,
+                  parent.title,
+                  '自动补建 · 年度目标尚未完成，请分配本月权重',
+                  month,
+                ],
+              )
+            : await client.query(
+                `INSERT INTO weekly_tasks(id,user_id,monthly_goal_id,title,note,original_start,current_start,original_end,current_end,progress,status,priority) VALUES($1,$2,$3,$4,$5,$6,$6,$7,$7,0,'todo','P1') RETURNING *`,
+                [
+                  id,
+                  userId,
+                  parent.id,
+                  parent.title,
+                  '自动补建 · 月目标尚未完成，可继续细化本周动作',
+                  start,
+                  end,
+                ],
+              );
+        await client.query(
+          `INSERT INTO activity_logs(user_id,item_type,item_id,action,after_value) VALUES($1,$2,$3,'rollover_auto_create',$4)`,
+          [userId, childType, id, { item: item(childType, inserted.rows[0]) }],
+        );
+        generated[childType]++;
+      }
+    }
+    return generated;
   }
   private async ensureCarryover(
     client: PoolClient,

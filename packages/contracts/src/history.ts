@@ -93,6 +93,7 @@ export interface CarryoverList {
   offset: number;
 }
 export interface ReconcileResult {
+  generated?: { monthly: number; weekly: number };
   asOfDate: string;
   changed: Record<'monthly' | 'weekly' | 'daily', number>;
   remaining: number;
