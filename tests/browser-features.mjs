@@ -330,6 +330,13 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
         String.raw`(()=>{const lum=c=>{const v=c.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4});return .2126*v[0]+.7152*v[1]+.0722*v[2]};return [...document.querySelectorAll('.wb-choice-option')].map(e=>{const s=getComputedStyle(e),a=lum(s.color),b=lum(s.backgroundColor);return(Math.max(a,b)+.05)/(Math.min(a,b)+.05)});})()`,
       );
     await evaluate("document.querySelector('[data-view=weekly]').click()");
+    await evaluate(
+      "board.add('weekly',undefined,{title:'手动周任务控件对比度验证',parentId:null})",
+    );
+    await waitFor(
+      '!!document.querySelector(\'[aria-label="周任务状态"]\')',
+      'manual weekly controls without daily children',
+    );
     for (const label of ['周任务优先级', '周任务状态']) {
       await evaluate(
         'document.querySelector(\'[aria-label="' + label + '"]\').scrollIntoView({block:"center"})',
