@@ -1,4 +1,5 @@
 import { randomUUID } from '../lib/uuid';
+import { annualDeletionPlan } from '../lib/deletion-plan';
 import { newestFirst } from '../lib/item-order';
 import { computed, reactive, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
@@ -340,6 +341,18 @@ export const useWorkbenchStore = defineStore('workbench', () => {
             if (
               next.values.parentId &&
               data.commands.some((c) => c.itemId === next.values.parentId && c.action === 'create')
+            ) {
+              blocked.add(next.itemId);
+              continue;
+            }
+            if (
+              next.action === 'delete' &&
+              data.commands.some(
+                (child) =>
+                  child.action === 'delete' &&
+                  child.itemId !== next.itemId &&
+                  data.items.find((v) => v.id === child.itemId)?.parentId === next.itemId,
+              )
             ) {
               blocked.add(next.itemId);
               continue;
@@ -737,11 +750,26 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     limits[type] += 50;
     rebuild();
   }
-  async function remove(item: WorkItem) {
-    await persist(item, 'delete');
-    notice.value = '已移入回收站，下级内容保留；联网后同步';
-    schedule();
-    return !hasUnpersisted.value;
+  function deletionPlan(item: WorkItem) {
+    return annualDeletionPlan(item, Object.values(records));
+  }
+  async function remove(item: WorkItem, cascade = false) {
+    if (actionBusy.value) return false;
+    actionBusy.value = true;
+    try {
+      if (!(await persistAll())) return false;
+      const current = records[item.id];
+      if (!current || current.deletedAt) return false;
+      const targets = cascade ? [...deletionPlan(current).descendants, current] : [current];
+      await persistMany(targets.map((item) => ({ item, action: 'delete' as const, values: {} })));
+      notice.value = cascade
+        ? `已将年度目标及 ${targets.length - 1} 条关联内容移入回收站；联网后同步`
+        : '已移入回收站，下级内容保留；联网后同步';
+      schedule();
+      return !hasUnpersisted.value;
+    } finally {
+      actionBusy.value = false;
+    }
   }
   async function restore(item: WorkItem) {
     await persist(item, 'restore');
@@ -851,6 +879,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     changeSelection,
     more,
     remove,
+    deletionPlan,
     loadTrash,
     restore,
     options,

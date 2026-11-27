@@ -262,8 +262,9 @@ async function remove(value: WorkItem) {
   await nextTick();
   removeDialog.value?.showModal();
 }
-async function confirmRemove() {
-  if (removing.value && (await store.remove(removing.value))) {
+const removalPlan = computed(() => (removing.value ? store.deletionPlan(removing.value) : null));
+async function confirmRemove(cascade = false) {
+  if (removing.value && (await store.remove(removing.value, cascade))) {
     removeDialog.value?.close();
     removing.value = null;
   }
@@ -702,7 +703,18 @@ onUnmounted(() => {
     >
       <h2 id="delete-heading">删除这条{{ removing ? names[removing.type] : '事项' }}？</h2>
       <p>「{{ removing?.title || '未命名事项' }}」将移到回收站。</p>
-      <p>下级事项会保留，其直接上级关联将解除。恢复当前事项后，下级保持现有的关联。</p>
+      <template v-if="removing?.type === 'annual'">
+        <p data-delete-counts>
+          关联月目标 {{ removalPlan?.counts.monthly ?? 0 }} 项、周任务
+          {{ removalPlan?.counts.weekly ?? 0 }} 项、日待办 {{ removalPlan?.counts.daily ?? 0 }} 条。
+        </p>
+        <p>
+          是否一并删除这些关联内容？仅删除年度目标会保留月、周、日内容，月目标变为未关联，月 → 周 →
+          日的关联保留。
+        </p>
+        <p>一并删除将包含跨月、跨年的关联事项，全部移入回收站，不影响独立事项。</p>
+      </template>
+      <p v-else>下级事项会保留，其直接上级关联将解除。恢复当前事项后，下级保持现有的关联。</p>
       <p v-if="store.error" class="wb-dialog-error" role="alert">
         {{ store.error }}。可重试删除，或关闭后处理修改。
       </p>
@@ -718,9 +730,24 @@ onUnmounted(() => {
           type="button"
           class="wb-button danger"
           :disabled="store.actionBusy"
-          @click="confirmRemove"
+          @click="confirmRemove(false)"
         >
-          {{ store.actionBusy ? '正在删除…' : '确认删除' }}
+          {{
+            store.actionBusy
+              ? '正在删除…'
+              : removing?.type === 'annual'
+                ? '仅删除年度目标'
+                : '确认删除'
+          }}
+        </button>
+        <button
+          v-if="removing?.type === 'annual' && removalPlan?.total"
+          type="button"
+          class="wb-button danger"
+          :disabled="store.actionBusy"
+          @click="confirmRemove(true)"
+        >
+          删除年度目标及关联内容
         </button>
       </div>
     </dialog>

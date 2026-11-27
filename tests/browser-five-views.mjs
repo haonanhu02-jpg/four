@@ -235,6 +235,20 @@ try {
         'document.querySelector(".wb-project-columns").textContent.includes("年初项目验证")',
       ),
     );
+    const cloudCascadeDay = await evaluate(
+      `(async()=>{const b=document.querySelector('#app').__vue_app__.config.globalProperties.$pinia._s.get('workbench');const w=Object.values(b.records).find(v=>v.type==='weekly'&&v.parentId==='${cloudMonth}'&&!v.deletedAt);return (await b.add('daily',w.id,{title:'级联删除云端日待办'})).id})()`,
+    );
+    await wait(
+      `fetch('/api/data/export').then(r=>r.json()).then(d=>d.items.daily.some(v=>v.id==='${cloudCascadeDay}'))`,
+      'cascade child reaches cloud',
+    );
+    await evaluate(
+      `(()=>{const b=document.querySelector('#app').__vue_app__.config.globalProperties.$pinia._s.get('workbench');return b.remove(b.records['${projectId}'],true)})()`,
+    );
+    await wait(
+      `fetch('/api/data/export').then(r=>r.json()).then(d=>d.items.annual.some(v=>v.id==='${projectId}'&&v.deletedAt)&&d.items.monthly.some(v=>v.id==='${cloudMonth}'&&v.deletedAt)&&d.items.weekly.filter(v=>v.parentId==='${cloudMonth}').every(v=>v.deletedAt)&&d.items.daily.some(v=>v.id==='${cloudCascadeDay}'&&v.deletedAt)&&d.items.daily.some(v=>v.id==='${savedId}'&&!v.deletedAt))`,
+      'cascade sync deletes linked tree while preserving independent daily item',
+    );
     await clickText('退出登录');
     await wait('!!document.querySelector("#username")', 'return to guest entry');
   }
@@ -387,7 +401,10 @@ try {
   await clickText('载入示例并预览');
   await wait('!!document.querySelector(".wb-data-preview")', 'preview');
   await clickText('确认追加');
-  await wait('Object.values(board.records).filter(v=>v.type==="daily"&&!v.deletedAt).length===7', 'sample');
+  await wait(
+    'Object.values(board.records).filter(v=>v.type==="daily"&&!v.deletedAt).length===7',
+    'sample',
+  );
   if (await evaluate('!!document.querySelector(".wb-data-dialog[open]")'))
     await click('[aria-label="关闭数据管理"]');
   for (const type of ['annual', 'monthly']) {
@@ -931,6 +948,57 @@ try {
     `!!document.querySelector('[data-item-id="${outsideDay}"]')`,
     'current-period daily item remains visible',
   );
+  // Annual deletion choices operate on actual linked descendants, across dates.
+  const deletionFixture = await evaluate(`(async()=>{
+    const a=await board.add('annual',undefined,{title:'年度删除确认验证'});
+    const m=await board.add('monthly',a.id,{title:'跨年月目标',month:'2031-01'});
+    const w=Object.values(board.records).find(v=>v.type==='weekly'&&v.parentId===m.id&&!v.deletedAt);
+    const d=await board.add('daily',w.id,{title:'跨年日待办',date:'2031-01-02'});
+    const independent=await board.add('monthly',undefined,{title:'独立月目标保留验证',parentId:null,progress:100});
+    return {a:a.id,m:m.id,w:w.id,d:d.id,independent:independent.id};
+  })()`);
+  await view('annual');
+  const deleteAnnual = `[data-item-id="${deletionFixture.a}"] [aria-label="删除年度目标"]`;
+  await click(deleteAnnual);
+  await wait('!!document.querySelector("[data-delete-counts]")', 'annual deletion counts');
+  assert.match(
+    await evaluate('document.querySelector("[data-delete-counts]").textContent'),
+    /月目标 1 项、周任务 1 项、日待办 1 条/,
+  );
+  await clickText('取消');
+  assert.equal(await evaluate(`!!board.records['${deletionFixture.a}'].deletedAt`), false);
+  await click(deleteAnnual);
+  await clickText('仅删除年度目标');
+  await wait(
+    `!!board.records['${deletionFixture.a}'].deletedAt&&board.records['${deletionFixture.m}'].parentId===null`,
+    'keep descendants and detach monthly',
+  );
+  for (const key of ['m', 'w', 'd', 'independent'])
+    assert.equal(await evaluate(`!!board.records['${deletionFixture[key]}'].deletedAt`), false);
+  assert.equal(await evaluate(`board.records['${deletionFixture.w}'].parentId`), deletionFixture.m);
+  assert.equal(await evaluate(`board.records['${deletionFixture.d}'].parentId`), deletionFixture.w);
+  await evaluate(
+    `(async()=>{await board.restore(board.records['${deletionFixture.a}']);board.edit(board.records['${deletionFixture.m}'],{parentId:'${deletionFixture.a}'});await board.persistAll()})()`,
+  );
+  await click(deleteAnnual);
+  await clickText('删除年度目标及关联内容');
+  await wait(
+    `['${deletionFixture.a}','${deletionFixture.m}','${deletionFixture.w}','${deletionFixture.d}'].every(id=>!!board.records[id].deletedAt)`,
+    'cascade moves every linked item to trash',
+  );
+  assert.equal(
+    await evaluate(`!!board.records['${deletionFixture.independent}'].deletedAt`),
+    false,
+  );
+  await wait('!board.hasUnpersisted', 'cascade deletion persisted');
+  await reloadPage();
+  await evaluate(
+    'window.board=document.querySelector("#app").__vue_app__.config.globalProperties.$pinia._s.get("workbench");true',
+  );
+  for (const key of ['a', 'm', 'w', 'd'])
+    assert.equal(await evaluate(`!!board.records['${deletionFixture[key]}'].deletedAt`), true);
+  assert.equal(await evaluate(`board.records['${deletionFixture.independent}'].parentId`), null);
+
   const layouts = [];
   for (const width of [1440, 1024, 390]) {
     await call('Emulation.setDeviceMetricsOverride', {
