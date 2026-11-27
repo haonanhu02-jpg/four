@@ -582,7 +582,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     creating.value = true;
     try {
       const defaults: Record<WorkItemType, WorkItemValues> = {
-        annual: { year: selection.year, progress: 0, weight: 1 },
+        annual: { year: selection.year, progress: 0, weight: 1, progressMode: 'auto' },
         monthly: {
           month: selection.month,
           progress: 0,

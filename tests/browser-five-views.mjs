@@ -264,6 +264,7 @@ try {
     await evaluate('[...document.querySelectorAll(".wb-view-tabs button")].map(e=>e.dataset.view)'),
     ['annual', 'monthly', 'weekly', 'daily', 'charts', 'tree'],
   );
+  // New annual goals default to automatic monthly aggregation.
   // Follow the same UI path as an annual goal that has not started yet.
   await view('annual');
   await click('[data-add-type="annual"]');
@@ -271,9 +272,12 @@ try {
   const inactiveAnnual = await evaluate(
     'document.querySelector(".wb-goals-table tbody tr").dataset.itemId',
   );
+  assert.equal(
+    await evaluate(`board.records['${inactiveAnnual}'].progressMode`),
+    'auto',
+    'new annual goals default to monthly auto aggregation',
+  );
   await input(`[data-title-id="${inactiveAnnual}"]`, '未开始年度目标拆月验证');
-  await click(`[data-item-id="${inactiveAnnual}"] [aria-label="年度进度模式"]`);
-  await clickText('月目标自动汇总');
   await click(`[data-item-id="${inactiveAnnual}"] .wb-annual-row-actions .wb-link`);
   await wait(
     'board.view==="monthly"&&!!document.querySelector(".wb-goals-table tbody tr")',
@@ -513,7 +517,7 @@ try {
     ),
   );
   await click(`${summaryRow} [aria-label="年度目标执行状态"]`);
-  await clickText('开始执行（1%）');
+  await clickText('切换手动并开始（1%）');
   await wait(`board.records['${summaryGoal}'].progress===1`, 'start goal at one percent');
   assert.ok(
     await evaluate(
@@ -961,6 +965,30 @@ try {
   const deleteAnnual = `[data-item-id="${deletionFixture.a}"] [aria-label="删除年度目标"]`;
   await click(deleteAnnual);
   await wait('!!document.querySelector("[data-delete-counts]")', 'annual deletion counts');
+  await shot('annual-delete-light', '.wb-removal-dialog');
+  await evaluate("document.documentElement.setAttribute('data-theme','dark')");
+  await shot('annual-delete-dark', '.wb-removal-dialog');
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 390,
+    height: 844,
+    deviceScaleFactor: 1,
+    mobile: true,
+  });
+  assert.equal(
+    await evaluate(
+      '(()=>{const d=document.querySelector(".wb-removal-dialog");return d.scrollWidth<=d.clientWidth+1&&d.getBoundingClientRect().right<=innerWidth})()',
+    ),
+    true,
+    'delete confirmation fits mobile',
+  );
+  await shot('annual-delete-dark-mobile', '.wb-removal-dialog');
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 1440,
+    height: 1000,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await evaluate("document.documentElement.setAttribute('data-theme','light')");
   assert.match(
     await evaluate('document.querySelector("[data-delete-counts]").textContent'),
     /月目标 1 项、周任务 1 项、日待办 1 条/,

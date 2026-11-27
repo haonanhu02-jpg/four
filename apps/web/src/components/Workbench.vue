@@ -697,24 +697,67 @@ onUnmounted(() => {
     </dialog>
     <dialog
       ref="removeDialog"
-      class="wb-dialog"
+      class="wb-dialog wb-removal-dialog"
       aria-labelledby="delete-heading"
       @cancel="store.actionBusy && $event.preventDefault()"
     >
-      <h2 id="delete-heading">删除这条{{ removing ? names[removing.type] : '事项' }}？</h2>
-      <p>「{{ removing?.title || '未命名事项' }}」将移到回收站。</p>
+      <header class="wb-removal-heading">
+        <span class="wb-removal-icon" aria-hidden="true"
+          ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path
+              d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            /></svg
+        ></span>
+        <div>
+          <h2 id="delete-heading">删除{{ removing ? names[removing.type] : '事项' }}？</h2>
+          <p>内容将移入回收站，可在需要时恢复。</p>
+        </div>
+        <button
+          type="button"
+          class="wb-dialog-close"
+          aria-label="关闭删除确认"
+          :disabled="store.actionBusy"
+          @click="removeDialog?.close()"
+        >
+          ×
+        </button>
+      </header>
+      <div class="wb-removal-target">
+        <span>当前{{ removing ? names[removing.type] : '事项' }}</span
+        ><strong>{{ removing?.title || '未命名事项' }}</strong>
+      </div>
       <template v-if="removing?.type === 'annual'">
-        <p data-delete-counts>
-          关联月目标 {{ removalPlan?.counts.monthly ?? 0 }} 项、周任务
-          {{ removalPlan?.counts.weekly ?? 0 }} 项、日待办 {{ removalPlan?.counts.daily ?? 0 }} 条。
-        </p>
-        <p>
-          是否一并删除这些关联内容？仅删除年度目标会保留月、周、日内容，月目标变为未关联，月 → 周 →
-          日的关联保留。
-        </p>
-        <p>一并删除将包含跨月、跨年的关联事项，全部移入回收站，不影响独立事项。</p>
+        <div class="wb-removal-counts" data-delete-counts>
+          <span
+            >关联月目标 <b>{{ removalPlan?.counts.monthly ?? 0 }}</b> 项<span
+              class="wb-removal-comma"
+              >、</span
+            ></span
+          ><span
+            >周任务 <b>{{ removalPlan?.counts.weekly ?? 0 }}</b> 项<span class="wb-removal-comma"
+              >、</span
+            ></span
+          ><span
+            >日待办 <b>{{ removalPlan?.counts.daily ?? 0 }}</b> 条。</span
+          >
+        </div>
+        <div class="wb-removal-explanation">
+          <p>
+            <strong>仅删除年度目标</strong
+            ><span>保留月、周、日内容。月目标解除年度来源，下级之间的关联保留。</span>
+          </p>
+          <p>
+            <strong>一并删除关联内容</strong
+            ><span>关联的月、周、日一起移入回收站，包含跨月、跨年的安排。</span>
+          </p>
+        </div>
+        <p class="wb-removal-note">独立创建、未关联此年度的事项不受影响。</p>
       </template>
-      <p v-else>下级事项会保留，其直接上级关联将解除。恢复当前事项后，下级保持现有的关联。</p>
+      <p v-else class="wb-removal-note">
+        下级事项会保留，其直接上级关联将解除。恢复当前事项后，下级保持现有的关联。
+      </p>
       <p v-if="store.error" class="wb-dialog-error" role="alert">
         {{ store.error }}。可重试删除，或关闭后处理修改。
       </p>
@@ -728,7 +771,7 @@ onUnmounted(() => {
           取消</button
         ><button
           type="button"
-          class="wb-button danger"
+          class="wb-button wb-removal-keep"
           :disabled="store.actionBusy"
           @click="confirmRemove(false)"
         >

@@ -205,8 +205,8 @@ function addSibling() {
           :model-value="item.progressMode ?? 'manual'"
           label="年度进度模式"
           :options="[
-            { value: 'manual', label: '手动填写' },
             { value: 'auto', label: '月目标自动汇总' },
+            { value: 'manual', label: '手动填写' },
           ]"
           @update:model-value="(v) => change('progressMode', v)"
         />

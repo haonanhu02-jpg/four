@@ -1814,3 +1814,153 @@
     width: 100%;
   }
 }
+
+/* Delete confirmation: compact hierarchy, readable choices, restrained danger color. */
+.wb-dialog.wb-removal-dialog {
+  width: 540px;
+  max-width: calc(100vw - 32px);
+  padding: 26px;
+  border-radius: 20px;
+  box-sizing: border-box;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.wb-removal-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 22px;
+}
+.wb-removal-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: var(--negative-bg, #fff0f1);
+  color: var(--negative, #a23843);
+}
+.wb-removal-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.wb-removal-heading > div {
+  flex: 1;
+  min-width: 0;
+}
+.wb-removal-heading h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.4;
+}
+.wb-removal-heading p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.wb-removal-heading > button {
+  align-self: flex-start;
+  font-size: 23px !important;
+}
+.wb-removal-target {
+  display: grid;
+  gap: 5px;
+  padding: 13px 16px;
+  background: var(--surface-soft, #f5f7fb);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+.wb-removal-target > span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.wb-removal-target strong {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.wb-removal-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 13px 0 19px;
+}
+.wb-removal-counts > span {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 10px 4px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.wb-removal-counts b {
+  font-size: 17px;
+  color: var(--text);
+  margin: 0 3px;
+}
+.wb-removal-comma {
+  display: none;
+}
+.wb-removal-explanation {
+  display: grid;
+  gap: 12px;
+}
+.wb-removal-explanation p {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.wb-removal-explanation p:last-child {
+  border-color: var(--negative);
+}
+.wb-removal-explanation strong {
+  font-weight: 600;
+}
+.wb-removal-explanation span,
+.wb-removal-note {
+  color: var(--text-muted);
+}
+.wb-removal-dialog p.wb-removal-note {
+  font-size: 11px;
+  margin: 15px 0 0;
+}
+.wb-removal-dialog .wb-dialog-actions {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  gap: 8px;
+}
+.wb-removal-dialog .wb-button {
+  min-height: 38px;
+  padding: 8px 11px;
+  border-radius: 9px;
+}
+.wb-removal-dialog .wb-dialog-actions > button:first-child {
+  margin-right: auto;
+}
+.wb-removal-dialog .wb-removal-keep {
+  font-weight: 600;
+}
+@media (max-width: 540px) {
+  .wb-dialog.wb-removal-dialog {
+    padding: 20px;
+    border-radius: 16px;
+  }
+  .wb-removal-dialog .wb-dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .wb-removal-dialog .wb-dialog-actions > button:first-child {
+    margin-right: 0;
+  }
+  .wb-removal-dialog .wb-dialog-actions > button.danger {
+    grid-column: 1 / -1;
+  }
+  .wb-removal-heading h2 {
+    font-size: 18px;
+  }
+}
